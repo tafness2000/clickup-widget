@@ -130,7 +130,9 @@ def copy_mingit() -> None:
         return
 
     MINGIT_CACHE.mkdir(exist_ok=True)
-    cached = next(MINGIT_CACHE.glob('MinGit-*-64-bit.zip'), None)
+    # busybox 版は中身が絞られていて、うまく動かないことがある。通常版を使う。
+    cached = next((p for p in sorted(MINGIT_CACHE.glob('MinGit-*-64-bit.zip'))
+                   if 'busybox' not in p.name), None)
     if cached is None:
         raise SystemExit(
             'MinGit が見つかりません。次で取得してから、もう一度ビルドしてください:\n'

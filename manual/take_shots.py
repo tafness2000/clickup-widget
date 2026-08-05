@@ -214,12 +214,37 @@ def shot_chips_changed():
     js('closePicker(false);'
        'pickedList = DIR.lists[3]; pickedUser = DIR.members[1];'
        'pickedDue = DUE_PRESETS[3]; renderTargets();')
-    grab('chips-changed', shot_wide)
+    grab('chips-changed', shot_update_chip)
+
+
+# ── 新しい版のお知らせ ────────────────────────────────────────
+
+UPDATE = {
+    'state': 'available', 'behind': 3,
+    'localSha': 'a1b2c3d4e5f6', 'remoteSha': '9f8e7d6c5b4a',
+    'changes': [
+        '9f8e7d6 fix: 一覧の並び順がときどき入れ替わるのを直す',
+        '3c1a55e feat: 期限に「来週」を足す',
+        '7b20d91 docs: 説明書に更新のしかたを書く',
+    ],
+}
+
+
+def shot_update_chip():
+    js('resetForm("");'
+       f'setUpdate({json.dumps(UPDATE, ensure_ascii=True)});')
+    grab('update-chip', shot_update_panel)
+
+
+def shot_update_panel():
+    js('openUpdatePanel();')
+    grab('update-panel', shot_wide)
 
 
 # ── 広げた一覧 ────────────────────────────────────────────────
 
 def shot_wide():
+    js('closeUpdatePanel(); setUpdate(null);')     # 一覧の写真に混ざらないよう戻す
     w, h = layout.view_size(True)
     win.setFixedSize(w, h)
     js('resetForm(""); document.body.classList.add("wide");'
