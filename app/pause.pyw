@@ -19,8 +19,7 @@ os.environ.setdefault(
 )
 os.environ.setdefault('QT_OPENGL', 'software')
 
-from PyQt6.QtCore import (QUrl, QTimer, QAbstractNativeEventFilter, Qt,
-                          QBuffer, QIODevice)
+from PyQt6.QtCore import QUrl, QTimer, QAbstractNativeEventFilter, Qt
 from PyQt6.QtWidgets import QApplication, QMainWindow
 from PyQt6.QtGui import QCloseEvent, QColor
 from PyQt6.QtWebEngineWidgets import QWebEngineView
@@ -33,6 +32,7 @@ if _HERE not in sys.path:
     sys.path.insert(0, _HERE)
 
 import appconfig
+import backdrop
 import directory
 import feeds
 import gitupdate
@@ -162,9 +162,6 @@ class HotkeyFilter(QAbstractNativeEventFilter):
 DWMWA_WINDOW_CORNER_PREFERENCE = 33
 DWMWCP_ROUND                   = 2
 
-# 背後キャプチャの縮小率。粗く縮めるほど軽く、CSS 側で引き伸ばす分だけぼけ方も滑らかになる。
-BACKDROP_SCALE = 10
-
 
 def apply_rounded_corners(win: QMainWindow) -> None:
     """フレームレスウィンドウの四隅を Windows 11 の角丸に切る。
@@ -185,27 +182,6 @@ def apply_rounded_corners(win: QMainWindow) -> None:
     )
     if hr != 0:
         log(f'警告: 角丸の適用に失敗しました (HRESULT=0x{hr & 0xFFFFFFFF:08X})')
-
-
-def backdrop_data_uri(x: int, y: int, w: int, h: int) -> str:
-    """指定領域（論理座標）の画面を縮小した PNG の data URI にして返す。
-
-    ウィンドウ自体を透過させてすりガラスにはできない。QtWebEngine を GPU 合成なしで
-    動かしている（冒頭の d3d11 クラッシュ回避）と描画面が常に不透明になり、
-    WA_TranslucentBackground も DWM のアクリルも効かないため。
-    そこで表示直前に背後を撮り、ぼかして敷くことで同じ見た目を作る。
-    ぼかし自体は CSS の filter に任せる。
-    """
-    shot  = QApplication.primaryScreen().grabWindow(0, x, y, w, h)
-    small = shot.toImage().scaled(
-        max(w // BACKDROP_SCALE, 1), max(h // BACKDROP_SCALE, 1),
-        Qt.AspectRatioMode.IgnoreAspectRatio,
-        Qt.TransformationMode.SmoothTransformation,
-    )
-    buf = QBuffer()
-    buf.open(QIODevice.OpenModeFlag.WriteOnly)
-    small.save(buf, 'PNG')
-    return 'data:image/png;base64,' + bytes(buf.data().toBase64()).decode('ascii')
 
 
 class HideOnCloseWindow(QMainWindow):
@@ -237,31 +213,16 @@ def _push_quick(view: QWebEngineView, cfg: dict) -> None:
         f'typeof setFavorites==="function" && setFavorites({json.dumps(fav)})')
 
 
-def _push_backdrop(win: HideOnCloseWindow, view: QWebEngineView, w: int, h: int) -> None:
-    """表示位置の背後を撮って ui.html 側に渡す。失敗しても表示は続行する。
-
-    呼ぶのは窓が引っ込んでいる間だけ。出ている最中に撮ると自分が写り込むうえ、
-    避けるために hide → show を挟むと描画面の作り直しが間に合わず、
-    中身が描かれないまま出ることがある。
-    """
-    try:
-        pos = win.pos()
-        uri = backdrop_data_uri(pos.x(), pos.y(), w, h)
-    except Exception as e:
-        log(f'警告: 背景のキャプチャに失敗しました ({e})')
-        return
-    view.page().runJavaScript(
-        f'typeof setBackdrop==="function" && setBackdrop({json.dumps(uri)})')
-
-
 def _refresh_visible(win: HideOnCloseWindow, view: QWebEngineView,
                      feed: feeds.TaskFeed, context: str) -> None:
     """出しっぱなしのまま呼ばれたとき。
 
-    背景を撮り直すには一度隠す必要があり、その往復が描画面を壊す疑いがあるので、
-    背景は据え置いて中身だけ入れ直す。
+    背景も撮り直す。出したときのまま据え置くと、その後ずっと別の窓を見ていても
+    何時間も前の景色を敷いたままになり、背後に無いはずの色がガラスに残る。
+    自分を写さずに撮る手立ては backdrop 側にある。
     """
     log('呼び出されました（表示中のため中身だけ入れ直す）')
+    backdrop.push(win, view, win.width(), win.height(), hide_self=True)
     win.raise_()
     win.activateWindow()
     if context:      # 空で上書きしてメモを消さない
@@ -288,7 +249,8 @@ def show_window(win: HideOnCloseWindow, view: QWebEngineView, feed: feeds.TaskFe
     win.setFixedSize(w, h)
     layout.position_window(win, w, h, center=not ready)
 
-    _push_backdrop(win, view, w, h)
+    # 出る前なので自分は写り込まない。hide_self は要らない。
+    backdrop.push(win, view, w, h)
     win.show()
     win.raise_()
     win.activateWindow()

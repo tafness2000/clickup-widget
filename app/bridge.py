@@ -17,6 +17,7 @@ from PyQt6.QtCore import QObject, QTimer, QUrl, pyqtSignal, pyqtSlot
 from PyQt6.QtWidgets import QApplication
 
 import appconfig
+import backdrop
 import clickup_api
 import directory
 import feeds
@@ -170,6 +171,9 @@ class Bridge(QObject):
         w, h = layout.view_size(mode == 'wide')
         self._window.setFixedSize(w, h)
         layout.position_window(self._window, w, h)
+        # 大きさが変われば背後に来るものも変わる。前の絵のままだと引き伸ばされてずれる。
+        # 撮るのは移動し終えたあと。先に撮ると前の場所の景色になる。
+        backdrop.push(self._window, self._view, w, h, hide_self=True)
 
     # ── 更新 ──────────────────────────────────────────────────
 
