@@ -238,6 +238,8 @@ function openPicker(kind) {
 
 function closePicker(backToChip) {
   if (!isOpen()) return;
+  // 更新の知らせは別物（選ぶものが無い）。専用の閉じ方に任せる。
+  if (state.kind === 'update') { closeUpdatePanel(); return; }
   const kind = state.kind;
   state.kind = null;
   picker.classList.remove('open', 'due');

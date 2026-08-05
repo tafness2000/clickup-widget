@@ -29,6 +29,11 @@
       <button class="chip chip-due" id="chipDue" type="button" title="期限（Ctrl+D）">
         <span class="chip-ico">◷</span><span class="chip-label" id="chipDueLabel">今日</span>
       </button>
+      <!-- 新しい版があるときだけ出る。無いときは幅も食わない。 -->
+      <button class="chip chip-update" id="chipUpdate" type="button"
+              title="新しい版があります">
+        <span class="chip-ico">⬆</span><span class="chip-label">更新</span>
+      </button>
     </div>
 
     <div class="footer">
@@ -101,5 +106,6 @@
   <script src="ui.js"></script>
   <script src="picker.js"></script>
   <script src="wide.js"></script>
+  <script src="update.js"></script>
 </body>
 </html>

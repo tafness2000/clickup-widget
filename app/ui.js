@@ -285,6 +285,13 @@ document.addEventListener('keydown', e => {
 
   if (e.ctrlKey && (e.key === 'e' || e.key === 'E')) { e.preventDefault(); openWide(); return; }
 
+  // 更新の知らせは選ぶものが無いので、Esc で閉じるだけ。
+  // 矢印や Enter を候補パネルの操作として拾わせない。
+  if (state.kind === 'update') {
+    if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); closeUpdatePanel(); }
+    return;
+  }
+
   if (isOpen()) {
     if (e.key === 'ArrowDown') { e.preventDefault(); setActive(state.active + 1); return; }
     if (e.key === 'ArrowUp')   { e.preventDefault(); setActive(state.active - 1); return; }

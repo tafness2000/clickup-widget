@@ -11,6 +11,7 @@ from PyQt6.QtCore import QObject, pyqtSignal
 import appconfig
 import clickup_api
 import directory
+import gitupdate
 import outbox
 
 
@@ -93,6 +94,35 @@ class DirectoryFeed(QObject):
         appconfig.log(f"リスト {len(data.get('lists', []))} 件 / "
                       f"メンバー {len(data.get('members', []))} 人を取得しました")
         self.loaded.emit(json.dumps(directory.build_payload(filled, data), ensure_ascii=True))
+
+
+class UpdateFeed(QObject):
+    """新しい版が出ていないかを見る。起動したときに 1 回だけ。
+
+    git fetch はネットワークを待つので、窓を出す流れとは切り離す。
+    取りに行けなくても静かに諦める（更新は「できたら嬉しい」もので、
+    中断メモを書くのに要るものではない）。
+    """
+    loaded = pyqtSignal(str)
+
+    def refresh(self) -> None:
+        threading.Thread(target=self._fetch, daemon=True).start()
+
+    def _fetch(self) -> None:
+        try:
+            status = gitupdate.check_status()
+            gitupdate.save_status({**gitupdate.load_status(), **status})
+            if status['state'] == 'available':
+                status['changes'] = gitupdate.changes_summary()
+                appconfig.log(f"更新があります（{status['behind']} 件 / "
+                              f"{status['localSha'][:7]} → {status['remoteSha'][:7]}）")
+            elif status['state'] not in ('current', 'not_configured'):
+                appconfig.log(f"更新の確認: {status['state']} — {status['message']}")
+        except Exception as e:
+            appconfig.log(f'警告: 更新を確認できませんでした ({e})')
+            self.loaded.emit(json.dumps({'state': 'checking_failed'}))
+            return
+        self.loaded.emit(json.dumps(status, ensure_ascii=True))
 
 
 # 再送は 3 か所（起動直後・登録の直後・5 分ごと）から呼ばれる。同じ outbox.json を

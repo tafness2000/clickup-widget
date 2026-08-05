@@ -5,6 +5,8 @@ HTML 側は bridge.xxx(...) の形でここだけを触る。ClickUp との通�
 """
 import json
 import os
+import subprocess
+import sys
 import threading
 import time
 import urllib.error
@@ -12,11 +14,13 @@ import webbrowser
 from datetime import datetime
 
 from PyQt6.QtCore import QObject, QTimer, QUrl, pyqtSignal, pyqtSlot
+from PyQt6.QtWidgets import QApplication
 
 import appconfig
 import clickup_api
 import directory
 import feeds
+import gitupdate
 import ime
 import layout
 import outbox
@@ -31,6 +35,13 @@ TASK_URL_PREFIX = 'https://app.clickup.com/'
 # 同じ内容がこの秒数のうちに続けて届いたら、2 件目以降は送らない。
 # Ctrl+Enter を連打されたとき、待っている間に呼び出しが積まれるため。
 DUPLICATE_WINDOW_SEC = 5
+
+# 黒い窓を出さずに別のプロセスを起こすための印。
+CREATE_NO_WINDOW = 0x08000000
+
+# updater が動き出したかを見届ける待ち方（0.25 秒 × 20 = 最大 5 秒）。
+UPDATER_WAIT_SEC   = 0.25
+UPDATER_WAIT_STEPS = 20
 
 
 def _autostart_target() -> tuple[str, str, str]:
@@ -192,6 +203,64 @@ class Bridge(QObject):
         w, h = layout.view_size(mode == 'wide')
         self._window.setFixedSize(w, h)
         layout.position_window(self._window, w, h)
+
+    # ── 更新 ──────────────────────────────────────────────────
+
+    @pyqtSlot(result=str)
+    def startUpdate(self) -> str:
+        """更新を始める。実際の作業は別のプロセス（updater.pyw）に任せる。
+
+        自分自身のファイルを書き換えながら動くわけにいかないので、
+        updater を起こしてから、こちらは窓を閉じて終わる。
+        """
+        try:
+            return self._start_update()
+        except Exception as e:
+            appconfig.log(f'警告: 更新を始められませんでした ({e})')
+            return json.dumps({'ok': False, 'error': str(e)})
+
+    def _start_update(self) -> str:
+        status = gitupdate.check_status(fetch=False)
+        if status['state'] not in ('available', 'blocked'):
+            return json.dumps({'ok': False, 'error': status['message']})
+        if status['state'] == 'blocked':
+            return json.dumps({'ok': False, 'error': status['message']})
+
+        script = os.path.join(appconfig.BASE, 'updater.pyw')
+        if not os.path.exists(script):
+            return json.dumps({'ok': False, 'error': '更新の仕組みが見つかりません'})
+
+        # 起こす前に印を書いておく。updater がここから先へ進めたかどうかで、
+        # 本当に動き出したかを見分ける（起動できただけでは動いたと言えない）。
+        gitupdate.set_run_state('queued', 'queued', 1, '更新の準備をしています')
+
+        subprocess.Popen([self._updater_python(), script],
+                         cwd=appconfig.BASE, creationflags=CREATE_NO_WINDOW)
+
+        # 走り出したことを見届けてから終わる。見届けずに終わると、
+        # updater がこけていた場合に何も起きないまま常駐だけ消える。
+        if not self._wait_until_started():
+            appconfig.log('警告: 更新が始まりませんでした。常駐は続けます')
+            return json.dumps({'ok': False, 'error': '更新を始められませんでした'})
+
+        appconfig.log('更新を始めました。いったん終了します')
+        QTimer.singleShot(400, QApplication.quit)
+        return json.dumps({'ok': True})
+
+    @staticmethod
+    def _updater_python() -> str:
+        """updater を動かす Python。配布版は同梱のもの。"""
+        bundled = os.path.join(os.path.dirname(appconfig.BASE), 'runtime', 'pythonw.exe')
+        return bundled if os.path.exists(bundled) else sys.executable
+
+    @staticmethod
+    def _wait_until_started(limit: int = UPDATER_WAIT_STEPS) -> bool:
+        for _ in range(limit):
+            time.sleep(UPDATER_WAIT_SEC)
+            run = gitupdate.load_status().get('lastRun') or {}
+            if run.get('state') and run['state'] != 'queued':
+                return True
+        return False
 
     @pyqtSlot(str, str)
     def toggleFavorite(self, kind: str, item_id: str) -> None:

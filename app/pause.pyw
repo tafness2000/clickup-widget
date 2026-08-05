@@ -34,6 +34,7 @@ if _HERE not in sys.path:
 import appconfig
 import directory
 import feeds
+import gitupdate
 import layout
 # BASE は appconfig.BASE として都度読む。from import で束縛すると、
 # 置き場所を差し替えて動かすとき（テストなど）にここだけ古い値を掴んでしまう。
@@ -43,6 +44,9 @@ from layout import SETUP_H, SETUP_W, WIN_H, WIN_W
 
 # 未送信分を送り直す間隔。
 FLUSH_INTERVAL_MS = 5 * 60 * 1000
+
+# 起動してから更新を見に行くまでの間。窓が出るのを待たせないために少し置く。
+UPDATE_CHECK_DELAY_MS = 3000
 
 HOTKEY_ID = 1
 MOD_CTRL  = 0x0002
@@ -349,8 +353,11 @@ def _connect_bridge(win: HideOnCloseWindow, view: QWebEngineView) -> tuple[Bridg
     return web_bridge, channel
 
 
-def _connect_feeds(view: QWebEngineView) -> tuple[feeds.TaskFeed, feeds.DirectoryFeed]:
-    """裏で取ってきたものを画面へ流し込む線をつなぐ。"""
+def _connect_feeds(view: QWebEngineView):
+    """裏で取ってきたものを画面へ流し込む線をつなぐ。
+
+    戻り値は 3 つとも呼び出し側で持ち続けること（Python 側の参照が切れると回収される）。
+    """
     feed = feeds.TaskFeed()
     feed.loaded.connect(lambda payload: view.page().runJavaScript(
         f'typeof setTasks==="function" && setTasks({payload})'))
@@ -358,7 +365,27 @@ def _connect_feeds(view: QWebEngineView) -> tuple[feeds.TaskFeed, feeds.Director
     directory_feed = feeds.DirectoryFeed()
     directory_feed.loaded.connect(lambda payload: view.page().runJavaScript(
         f'typeof setDirectory==="function" && setDirectory({payload})'))
-    return feed, directory_feed
+
+    update_feed = feeds.UpdateFeed()
+    update_feed.loaded.connect(lambda payload: view.page().runJavaScript(
+        f'typeof setUpdate==="function" && setUpdate({payload})'))
+    return feed, directory_feed, update_feed
+
+
+def _report_last_update(view: QWebEngineView) -> None:
+    """前回の更新がどうなったかを一度だけ知らせる。
+
+    updater が書いた印を読んで、読んだら消す。残しておくと窓を出すたびに
+    「新しい版になりました」と言い続けることになる。
+    """
+    status = gitupdate.load_status()
+    run    = status.get('lastRun')
+    if not run or run.get('state') not in ('completed', 'failed'):
+        return
+    view.page().runJavaScript(
+        'typeof setUpdateResult==="function" && setUpdateResult('
+        + json.dumps(run, ensure_ascii=True) + ')')
+    gitupdate.save_status({k: v for k, v in status.items() if k != 'lastRun'})
 
 
 def _on_page_ready(view: QWebEngineView, directory_feed: feeds.DirectoryFeed) -> None:
@@ -371,6 +398,7 @@ def _on_page_ready(view: QWebEngineView, directory_feed: feeds.DirectoryFeed) ->
     if not is_setup_complete(latest):
         return
     _push_directory(view, latest)
+    _report_last_update(view)
     if directory.is_stale(directory.load(appconfig.BASE)):
         directory_feed.refresh(latest)
 
@@ -394,7 +422,7 @@ def main() -> None:
     view.load(QUrl.fromLocalFile(bundled('setup.html' if initial_setup else 'ui.html')))
     apply_rounded_corners(win)
 
-    feed, directory_feed = _connect_feeds(view)
+    feed, directory_feed, update_feed = _connect_feeds(view)
     view.loadFinished.connect(
         lambda ok: _on_page_ready(view, directory_feed) if ok else None)
 
@@ -417,6 +445,9 @@ def main() -> None:
         view.loadFinished.disconnect(_show_first)
         QTimer.singleShot(0, lambda: show_window(win, view, feed))
         QTimer.singleShot(0, lambda: feeds.flush_outbox_async(load_config()))
+        # 新しい版が出ていないかは、起動したときに 1 回だけ見る。
+        # 少し遅らせるのは、窓が出るまでの間にネットワークを待たせないため。
+        QTimer.singleShot(UPDATE_CHECK_DELAY_MS, update_feed.refresh)
 
     view.loadFinished.connect(_show_first)
     sys.exit(app.exec())

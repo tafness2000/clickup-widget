@@ -45,7 +45,7 @@ APP_FILES = [
     'pause.pyw', 'updater.pyw',
     'appconfig.py', 'bridge.py', 'clickup_api.py', 'directory.py', 'feeds.py',
     'gitupdate.py', 'ime.py', 'layout.py', 'outbox.py', 'secretstore.py', 'startup.py',
-    'ui.html', 'ui.css', 'ui.js', 'picker.js', 'wide.js', 'setup.html',
+    'ui.html', 'ui.css', 'ui.js', 'picker.js', 'wide.js', 'update.js', 'setup.html',
     'watchdog.ps1', 'watchdog.vbs', 'register-watchdog.ps1',
 ]
 
@@ -113,6 +113,38 @@ def prune_qt(qt6: Path) -> None:
     for qm in (qt6 / 'translations').glob('*.qm'):
         if '_ja' not in qm.name and '_en' not in qm.name:
             qm.unlink()
+
+
+MINGIT_CACHE = HERE / '.cache'
+
+
+def copy_mingit() -> None:
+    """Git を同梱する。利用者に別途インストールさせないため。
+
+    配布物は Git のリポジトリとして置かれ、そこから新しい版を取り込む。
+    Git for Windows の MinGit は署名済みなので Smart App Control を通る。
+    一度落としたものは .cache に取っておき、毎回のビルドで取り直さない。
+    """
+    if GIT_DIR.exists():
+        print(f'  Git: すでにあります（{GIT_DIR.name}）')
+        return
+
+    MINGIT_CACHE.mkdir(exist_ok=True)
+    cached = next(MINGIT_CACHE.glob('MinGit-*-64-bit.zip'), None)
+    if cached is None:
+        raise SystemExit(
+            'MinGit が見つかりません。次で取得してから、もう一度ビルドしてください:\n'
+            '  gh release download --repo git-for-windows/git --pattern "MinGit-*-64-bit.zip" '
+            f'--dir "{MINGIT_CACHE}"')
+
+    print(f'  Git: {cached.name} を展開します')
+    GIT_DIR.mkdir(parents=True, exist_ok=True)
+    with zipfile.ZipFile(cached) as zf:
+        zf.extractall(GIT_DIR)
+
+    git_exe = GIT_DIR / 'cmd' / 'git.exe'
+    if not git_exe.exists():
+        raise SystemExit(f'展開したのに git.exe がありません: {git_exe}')
 
 
 def write_path_file() -> None:
@@ -183,6 +215,53 @@ def copy_extras() -> None:
         shutil.copy(HERE / name, undo / name)
 
 
+def make_repo() -> None:
+    """配布物そのものを Git のリポジトリにする。
+
+    利用者のフォルダで git pull できるようにするため、いまの HEAD を
+    そのまま clone してくる。--depth 1 にするのは、履歴まで配ると
+    zip が大きくなるうえ、利用者が過去へ戻る用事がないため。
+    """
+    ok, remote = _git('config', '--get', 'remote.origin.url')
+    if not ok or not remote:
+        raise SystemExit('取得先（origin）が設定されていません。'
+                         '配布物から更新できないので、先に設定してください。')
+
+    ok, head = _git('rev-parse', 'HEAD')
+    ok2, dirty = _git('status', '--short')
+    if dirty.strip():
+        print('  ※ 手元に未コミットの変更があります。配布物には入りません:')
+        for line in dirty.splitlines()[:5]:
+            print(f'      {line}')
+
+    ok, out = _git('clone', '--depth', '1', '--branch', _current_branch(),
+                   remote, str(DIST_DIR / '.gitwork'), cwd=str(HERE))
+    if not ok:
+        raise SystemExit(f'配布物をリポジトリにできませんでした: {out[:200]}')
+
+    # clone した中身のうち .git だけを残し、ファイルは build が作ったものを使う。
+    work = DIST_DIR / '.gitwork'
+    shutil.move(str(work / '.git'), str(DIST_DIR / '.git'))
+    shutil.rmtree(work, ignore_errors=True)
+
+    ok, cloned_head = _git('rev-parse', 'HEAD', cwd=str(DIST_DIR))
+    print(f'  リポジトリ: {remote}  HEAD={cloned_head[:7]}')
+    if cloned_head[:7] != head[:7]:
+        print(f'  ※ 手元（{head[:7]}）とちがいます。push し忘れていませんか')
+
+
+def _git(*args: str, cwd: str | None = None) -> tuple[bool, str]:
+    done = subprocess.run(['git', *args], cwd=cwd or str(HERE),
+                          capture_output=True, text=True,
+                          encoding='utf-8', errors='replace')
+    return done.returncode == 0, ((done.stdout or '') + (done.stderr or '')).strip()
+
+
+def _current_branch() -> str:
+    ok, name = _git('branch', '--show-current')
+    return name if ok and name else 'main'
+
+
 def check_manual() -> None:
     """説明書が配布物の実物と食い違っていないか。
 
@@ -214,6 +293,7 @@ def verify_layout() -> None:
         RT_DIR / f'python{version}._pth',
         RT_DIR / 'Lib' / 'site-packages' / 'PyQt6' / 'QtCore.pyd',
         RT_DIR / 'Lib' / 'site-packages' / 'PyQt6' / 'Qt6' / 'bin' / 'QtWebEngineProcess.exe',
+        GIT_DIR / 'cmd' / 'git.exe',
         *[APP_DIR / name for name in APP_FILES],
         APP_DIR / 'config.json',
         *[DIST_DIR / UNDO_DIR_NAME / name for name in UNDO_FILES],
@@ -275,17 +355,21 @@ if __name__ == '__main__':
     shutil.rmtree(DIST_DIR, ignore_errors=True)
     DIST_DIR.mkdir(parents=True, exist_ok=True)
 
-    print('=== Step 2: Python と Qt を同梱 ===')
+    print('=== Step 2: Python と Qt と Git を同梱 ===')
     copy_runtime()
+    copy_mingit()
 
     print('=== Step 3: 常駐本体をコピー ===')
     copy_app()
     copy_extras()
 
-    print('\n=== Step 4: 配布物の確認 ===')
+    print('\n=== Step 4: 更新できるようリポジトリにする ===')
+    make_repo()
+
+    print('\n=== Step 5: 配布物の確認 ===')
     verify_layout()
     check_signatures()
 
-    print('\n=== Step 5: zip 化 ===')
+    print('\n=== Step 6: zip 化 ===')
     make_zip()
     print(f'\n完了。{ZIP_OUT.relative_to(HERE).as_posix()} を配布してください。')
