@@ -58,5 +58,3 @@ python build.py
 利用者ごとのデータ（`app/config.json` `app/directory.json` `app/outbox.json` とログ）は
 `.gitignore` で外してある。**接続情報や社内の案件名・メールアドレスが入るため、
 コミットする前に `git status` で確認すること。**
-
-<!-- 配布物からの更新テスト -->
