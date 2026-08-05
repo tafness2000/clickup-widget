@@ -121,7 +121,9 @@ def check_status(fetch: bool = True) -> dict:
             got['branch'], got['upstream'] = branch, upstream
             return got
 
-    _, dirty_out = run_git('status', '--short')
+    # 追跡していないファイルは見ない。更新のログや控え、利用者の設定など、
+    # Git が知らないものが増えただけで「手を入れた」と見なすと更新できなくなる。
+    _, dirty_out = run_git('status', '--short', '--untracked-files=no')
     _, local_sha = run_git('rev-parse', 'HEAD')
     _, remote_sha = run_git('rev-parse', '@{u}')
     ok, counts = run_git('rev-list', '--left-right', '--count', 'HEAD...@{u}')

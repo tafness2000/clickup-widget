@@ -2,7 +2,11 @@
 
 常駐が自分自身のファイルを書き換えながら動くわけにいかないので、こちらへ渡す。
 呼ばれ方:
-    pythonw.exe updater.pyw
+    pythonw.exe updater.pyw [更新するフォルダ]
+
+フォルダを渡さなければ、この updater.pyw が置かれている場所を更新する。
+渡せるようにしてあるのは、検証で別の場所を更新して試すため
+（そうしないと、テストのたびに本物のフォルダを触ることになる）。
 
 進め方は決まっている。各段階の前に update-status.json を書くので、
 途中で止まっても「どこまで進んだか」が残る。
@@ -28,6 +32,15 @@ if _HERE not in sys.path:
 
 import appconfig
 import gitupdate
+
+# どのフォルダを更新するか。引数が無ければ、自分が置かれている場所。
+# appconfig の既定はこのファイルの位置から決まるので、別の場所を更新したいときは
+# 先に差し替えておく（下の import より前でないと、各モジュールが古い値を掴む）。
+if len(sys.argv) > 1:
+    _target = os.path.abspath(sys.argv[1])
+    appconfig.BASE        = _target
+    appconfig.CONFIG_PATH = os.path.join(_target, 'config.json')
+    appconfig.LOG_PATH    = os.path.join(_target, 'pausetask.log')
 
 CREATE_NO_WINDOW = 0x08000000
 
@@ -74,7 +87,9 @@ def git(log: Log, *args: str) -> str:
 def step_git_check(log: Log) -> None:
     gitupdate.set_run_state('running', 'git-check', 10, '手元の状態を確かめています',
                             log.path)
-    out = git(log, 'status', '--short')
+    # 追跡していないファイルは見ない。更新のログや控え、利用者の設定など、
+    # Git が知らないものが増えただけで止まっては更新できない。
+    out = git(log, 'status', '--short', '--untracked-files=no')
     if out.strip():
         # 利用者が何か直している。上書きすると消えるので、ここで止める。
         raise Failed('手元に変更されたファイルがあるため、更新を中止しました。\n'
@@ -127,9 +142,20 @@ def step_check_code(log: Log, backup: str) -> None:
                      f'控えは {backup} にあります。')
 
 
-def step_restart(log: Log, backup: str) -> None:
-    gitupdate.set_run_state('running', 'restart', 94, '起動し直しています', log.path, backup)
+def step_restart(log: Log, backup: str, mark: bool = True) -> None:
+    """常駐を起動し直す。
+
+    mark を False にするのは失敗のあと。そこで「起動し直しています」と書くと、
+    せっかく残した中止の理由を消してしまう（利用者が読むのはそちらなので）。
+    """
+    if mark:
+        gitupdate.set_run_state('running', 'restart', 94, '起動し直しています',
+                                log.path, backup)
     script = os.path.join(appconfig.BASE, 'pause.pyw')
+    if not os.path.exists(script):
+        log.write(f'常駐の本体が無いので起動し直しません: {script}')
+        return
+
     pythonw = os.path.join(os.path.dirname(appconfig.BASE), 'runtime', 'pythonw.exe')
     if not os.path.exists(pythonw):
         pythonw = sys.executable            # 開発機ではいま動いているものを使う
@@ -139,7 +165,14 @@ def step_restart(log: Log, backup: str) -> None:
 
 
 def wait_for_exit(log: Log) -> None:
-    """常駐が終わるのを待つ。掴まれたままのファイルを書き換えないため。"""
+    """常駐が終わるのを待つ。掴まれたままのファイルを書き換えないため。
+
+    自分の場所を更新するときだけ待つ。別の場所を指定されている（検証など）なら、
+    いま動いている常駐とは無関係なので待つ意味がない。
+    """
+    if os.path.normcase(appconfig.BASE) != os.path.normcase(_HERE):
+        return
+
     import ctypes
     kernel32 = ctypes.WinDLL('kernel32', use_last_error=True)
     for _ in range(WAIT_EXIT_SEC * 2):
@@ -153,7 +186,14 @@ def wait_for_exit(log: Log) -> None:
 
 
 def main() -> None:
-    log = Log()
+    try:
+        log = Log()
+    except Exception as e:
+        # ログすら作れない。ここで黙って終わると「押したのに何も起きない」になる。
+        gitupdate.set_run_state('failed', 'failed', 100,
+                                f'更新の記録を残せませんでした（{e}）')
+        return
+
     backup = ''
     try:
         gitupdate.set_run_state('running', 'start', 5, '更新を始めます', log.path)
@@ -184,9 +224,12 @@ def main() -> None:
 
 
 def _restart_after_failure(log: Log) -> None:
-    """失敗しても常駐は戻す。使えないまま放置しない。"""
+    """失敗しても常駐は戻す。使えないまま放置しない。
+
+    状態は書き換えない。中止した理由が消えると、利用者は何が起きたか分からなくなる。
+    """
     try:
-        step_restart(log, '')
+        step_restart(log, '', mark=False)
     except Exception as e:
         log.write(f'起動し直せませんでした: {e}')
 

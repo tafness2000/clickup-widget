@@ -234,7 +234,9 @@ class Bridge(QObject):
         # 本当に動き出したかを見分ける（起動できただけでは動いたと言えない）。
         gitupdate.set_run_state('queued', 'queued', 1, '更新の準備をしています')
 
-        subprocess.Popen([self._updater_python(), script],
+        # 更新するフォルダを明に渡す。updater は別のプロセスなので、
+        # こちらで差し替えた置き場所は伝わらない。
+        subprocess.Popen([self._updater_python(), script, appconfig.BASE],
                          cwd=appconfig.BASE, creationflags=CREATE_NO_WINDOW)
 
         # 走り出したことを見届けてから終わる。見届けずに終わると、
