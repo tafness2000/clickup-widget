@@ -197,9 +197,10 @@ input.task:focus, textarea.memo:focus {
 }
 .update-later:hover { background: rgba(255,255,255,0.08); color: var(--text); }
 
-/* ── お気に入りの★ ── */
+/* ── 行の右に載せるボタン（既定にする ⌂ ／ お気に入りの★） ── */
 
-.pick-fav {
+.pick-fav,
+.pick-pin {
   flex: none;
   width: 26px; height: 26px;
   display: flex; align-items: center; justify-content: center;
@@ -212,10 +213,15 @@ input.task:focus, textarea.memo:focus {
   transition: opacity 0.12s, color 0.12s, background 0.12s;
 }
 .pick-row:hover .pick-fav,
-.pick-row.active .pick-fav { opacity: 1; }
-.pick-fav:hover { background: rgba(255,255,255,0.12); color: var(--text); }
+.pick-row.active .pick-fav,
+.pick-row:hover .pick-pin,
+.pick-row.active .pick-pin { opacity: 1; }
+.pick-fav:hover,
+.pick-pin:hover { background: rgba(255,255,255,0.12); color: var(--text); }
 /* 付いているものは常に見せる。付いていることが並び順の理由なので。 */
 .pick-fav.on { opacity: 1; color: #FBBF24; }
+/* ⌂ は「ここを既定にする」。既定の行には出さないので、点いた状態は無い。 */
+.pick-pin:hover { color: #93C5FD; }
 
 /* ── 期限のパネル ── */
 

@@ -232,13 +232,18 @@
 
 <ol>
   <li>配布された zip ファイルを解凍します</li>
-  <li>「ClickUpWidget」フォルダごと、好きな場所に移動してください（例: <code>C:\Tools\ClickUpWidget\</code>）</li>
+  <li>「ClickUpWidget」フォルダごと、好きな場所に置いてください（例: <code>C:\Tools\ClickUpWidget\</code>）</li>
   <li>フォルダの中の <strong>「ClickUpWidget を起動」</strong> をダブルクリック（黒い画面が一瞬出ますが、そのままで大丈夫です）</li>
 </ol>
 
-<div class="warn">
-  <strong>先に置き場所を決めてください</strong>
-  あとからフォルダを移動すると、自動起動の設定が壊れます。
+<div class="note">
+  <strong>置き場所は、あとからでも変えられます</strong>
+  最初に出る画面が、いまフォルダのある場所を教えてくれます。
+  別の場所へ置きたいときは、そこで <strong>「終了する」</strong> を押し、
+  フォルダごと移動してから開き直してください。
+  <br />
+  設定を済ませたあとに移動しても構いません。次に起動したときに、自動起動と見張り役は
+  <strong>新しい場所を指すよう自動で直ります</strong>。
 </div>
 
 <div class="note">
@@ -253,7 +258,27 @@
 
 <div class="step">
   <div class="step-body">
-    <h3><span class="num">1</span>ClickUp とつなぎます</h3>
+    <h3><span class="num">1</span>この場所でよいか確かめます</h3>
+    <p>
+      いまフォルダがある場所が出ます。そこでよければ、そのまま「次へ」。
+    </p>
+    <p>
+      別の場所へ置きたいときは <strong>「終了する」</strong> を押してください。
+      アプリが終わるので、フォルダごと動かしてから、もう一度「ClickUpWidget を起動」で開き直します。
+    </p>
+    <p style="color:var(--ink-mid);font-size:14px">
+      右上の <strong>✕</strong> は、どの手順からでも押せます。設定の途中でやめても、
+      次に起動したときは最初からやり直せます。
+    </p>
+  </div>
+  <figure>
+    <img src="{{IMG:setup-0}}" alt="初回設定 1: 置き場所の確認" width="430" />
+  </figure>
+</div>
+
+<div class="step">
+  <div class="step-body">
+    <h3><span class="num">2</span>ClickUp とつなぎます</h3>
     <p>
       「ClickUp の設定画面をひらく」を押すとブラウザが開きます。
       そこで <strong>API Token</strong> の Generate（または Copy）を押し、
@@ -264,13 +289,13 @@
     </p>
   </div>
   <figure>
-    <img src="{{IMG:setup-1}}" alt="初回設定 1: トークンの入力" width="430" />
+    <img src="{{IMG:setup-1}}" alt="初回設定 2: トークンの入力" width="430" />
   </figure>
 </div>
 
 <div class="step">
   <div class="step-body">
-    <h3><span class="num">2</span>デフォルトの登録先を決めます</h3>
+    <h3><span class="num">3</span>デフォルトの登録先を決めます</h3>
     <p>
       <strong>「Personal Work space」にあるあなたのパーソナルリストが、最初から選ばれています。</strong>
       そのまま「次へ」で構いません。
@@ -285,13 +310,13 @@
     </p>
   </div>
   <figure>
-    <img src="{{IMG:setup-2}}" alt="初回設定 2: 登録先の選択" width="430" />
+    <img src="{{IMG:setup-2}}" alt="初回設定 3: 登録先の選択" width="430" />
   </figure>
 </div>
 
 <div class="step">
   <div class="step-body">
-    <h3><span class="num">3</span>あと少しです</h3>
+    <h3><span class="num">4</span>あと少しです</h3>
     <p>
       「パソコンを起動したら自動ではじめる」にチェックが入った状態で「はじめる」を押します。
     </p>
@@ -300,18 +325,18 @@
     </p>
   </div>
   <figure>
-    <img src="{{IMG:setup-3}}" alt="初回設定 3: 自動起動" width="430" />
+    <img src="{{IMG:setup-3}}" alt="初回設定 4: 自動起動" width="430" />
   </figure>
 </div>
 
 <div class="step">
   <div class="step-body">
-    <h3><span class="num">4</span>準備ができました</h3>
+    <h3><span class="num">5</span>準備ができました</h3>
     <p>呼び出しキーが出たら完了です。「閉じる」を押してください。</p>
     <p>以降は <kbd>Ctrl</kbd> + <kbd>Shift</kbd> + <kbd>Space</kbd> でいつでも呼び出せます。</p>
   </div>
   <figure>
-    <img src="{{IMG:setup-4}}" alt="初回設定 4: 完了" width="430" />
+    <img src="{{IMG:setup-4}}" alt="初回設定 5: 完了" width="430" />
   </figure>
 </div>
 
@@ -416,6 +441,13 @@ app / runtime / mingit / manual / .git など
   <li>リスト名も担当者名もアルファベットなので、パネルを開くと<strong>入力モードが自動で半角英数に切り替わります</strong></li>
   <li>やめるときは、パネルの外（上のあいたところ）をクリックするか <kbd>Esc</kbd></li>
 </ul>
+
+<div class="note">
+  <strong>ここで変えるのは「今回だけ」です</strong>
+  次に呼び出したときは、また既定に戻ります。
+  <strong>ふだんの入れ先そのもの</strong>を変えたいときは、行の右に出る <strong>⌂</strong> を押してください
+  （<a href="#change">10. 設定を変えたいとき</a>）。
+</div>
 
 <div class="shots">
   <figure>
@@ -644,11 +676,22 @@ app / runtime / mingit / manual / .git など
 <!-- ══════════════════════════════════════════ -->
 <h2 id="autostart">9. 自動起動について</h2>
 
-<p>初回設定の③でチェックを入れていれば、もう設定は済んでいます。次のふたつが有効になっています。</p>
+<p>初回設定の④でチェックを入れていれば、もう設定は済んでいます。次のふたつが有効になっています。</p>
 <table>
   <tr><th>自動起動</th><td>Windows にサインインすると裏で待機します（画面には出ません）</td></tr>
   <tr><th>見張り役</th><td>5 分ごとに常駐の生死を確認し、落ちていれば起動し直します</td></tr>
 </table>
+
+<h3>フォルダを移動したとき</h3>
+<p>
+  <strong>何もしなくて構いません。</strong>
+  このふたつは前の場所を覚えているので、そのままだと動かなくなりますが、
+  移動先で一度アプリを起動すれば、<strong>新しい場所を指すよう自動で直ります</strong>。
+</p>
+<p style="color:var(--ink-mid);font-size:14px">
+  直したことは <code>app\pausetask.log</code> に残ります。
+  なお、自分で解除したもの（下記）を勝手に戻すことはありません。
+</p>
 
 <h3>やめたいとき</h3>
 <p>フォルダの中の「設定を解除するとき」を開き、次のどちらかをダブルクリックしてください。</p>
@@ -660,22 +703,51 @@ app / runtime / mingit / manual / .git など
 <!-- ══════════════════════════════════════════ -->
 <h2 id="change">10. 設定を変えたいとき</h2>
 
-<p>デフォルトの登録先ごと変えたいときは、初回設定をやり直すのが確実です。</p>
+<h3>デフォルトの登録先を変える</h3>
+
+<p>
+  初回設定で選んだ「ふだんの入れ先」は、<strong>あとからいつでも変えられます</strong>。
+  設定をやり直す必要はありません。
+</p>
+
+<div class="step">
+  <div class="step-body">
+    <ol>
+      <li><kbd>Ctrl</kbd> + <kbd>Shift</kbd> + <kbd>Space</kbd> で入力画面を出す</li>
+      <li><strong>⌗</strong> を押してリストの一覧を開く</li>
+      <li>これからの既定にしたいリストにマウスを乗せ、行の右に出る <strong>⌂</strong> を押す</li>
+    </ol>
+    <p>
+      押した時点で入れ替わります。次に呼び出したときから、そのリストが最初に選ばれています。
+    </p>
+    <p style="color:var(--ink-mid);font-size:14px">
+      いま既定になっている行には <strong>「既定」</strong> と出ていて、⌂ は出ません（すでに既定だからです）。
+      その隣の <strong>☆</strong> は「よく使うものに入れる」で、別のはたらきです。
+    </p>
+  </div>
+  <figure>
+    <img src="{{IMG:pick-list}}" alt="行の右にある ⌂ で既定を変える" width="390" />
+  </figure>
+</div>
+
+<h3>いつもの期限を「今日」以外にしたい</h3>
+<p>
+  同じやり方です。<strong>◷</strong> を押して期限の一覧を開き、既定にしたいものの
+  <strong>⌂</strong> を押してください。
+</p>
+<p style="color:var(--ink-mid);font-size:14px">
+  「今日」「明日」「3日以内」「今週中」「1週間」「期限なし」の 6 つから選べます。
+</p>
+
+<h3>ClickUp のアカウントごと変えたい</h3>
+<p>別のアカウントで繋ぎ直したいときは、設定を消して最初からやり直します。</p>
 <ol>
   <li>アプリを終了（タスクマネージャーで <code>pythonw.exe</code> を終了）</li>
   <li><code>app</code> フォルダの中の <code>config.json</code> を削除</li>
   <li>「ClickUpWidget を起動」をダブルクリック → 設定画面が最初から出ます</li>
 </ol>
 <p style="color:var(--ink-mid);font-size:14px">
-  1 回だけ別のリストに入れたいときは、削除する必要はありません。入力画面の ⌗ を押してその場で選べます。
-</p>
-
-<h3>いつもの期限を「今日」以外にしたい</h3>
-<p><code>app\config.json</code> に次の行を足すと、それが既定になります。</p>
-<div class="tree">"default_due_preset": "week"</div>
-<p>
-  使えるのは <code>today</code> / <code>tomorrow</code> / <code>d3</code> /
-  <code>week</code> / <code>d7</code> / <code>none</code> です。
+  1 回だけ別のリストに入れたいときは、何も消す必要はありません。入力画面の ⌗ を押してその場で選べます。
 </p>
 
 <!-- ══════════════════════════════════════════ -->

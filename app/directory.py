@@ -31,8 +31,17 @@ def load(base: str) -> dict:
 
 
 def save(base: str, data: dict) -> None:
-    with open(_path(base), 'w', encoding='utf-8') as f:
+    """一時ファイルに書いてから置き換える。
+
+    直に上書きすると、書いている最中に読んだ側が途中までの JSON を掴む。
+    取り直しは裏のスレッドが 1 日 1 回やるので、読み手（既定の入れ替えなど）と
+    重なる瞬間が必ずある。
+    """
+    path      = _path(base)
+    temporary = path + '.tmp'
+    with open(temporary, 'w', encoding='utf-8') as f:
         json.dump(data, f, indent=2, ensure_ascii=False)
+    os.replace(temporary, path)
 
 
 def is_stale(data: dict, now: float | None = None) -> bool:

@@ -4,6 +4,7 @@ import json
 import os
 import re
 import sys
+import threading
 import traceback
 
 # GPU (Direct3D) 描画を回避してソフトウェアレンダリングに固定する。
@@ -36,6 +37,7 @@ import directory
 import feeds
 import gitupdate
 import layout
+import startup
 # BASE は appconfig.BASE として都度読む。from import で束縛すると、
 # 置き場所を差し替えて動かすとき（テストなど）にここだけ古い値を掴んでしまう。
 from appconfig import bundled, is_setup_complete, load_config, log
@@ -47,6 +49,9 @@ FLUSH_INTERVAL_MS = 5 * 60 * 1000
 
 # 起動してから更新を見に行くまでの間。窓が出るのを待たせないために少し置く。
 UPDATE_CHECK_DELAY_MS = 3000
+
+# 置き場所が変わっていないかを見るまでの間。PowerShell を呼ぶので窓より後に回す。
+REALIGN_DELAY_MS = 1500
 
 HOTKEY_ID = 1
 MOD_CTRL  = 0x0002
@@ -403,6 +408,27 @@ def _on_page_ready(view: QWebEngineView, directory_feed: feeds.DirectoryFeed) ->
         directory_feed.refresh(latest)
 
 
+def _realign_async() -> None:
+    """フォルダごと引っ越していたら、自動起動と見張り役の指す先を直す。
+
+    起動のたびに 1 回だけ、ワーカースレッドから。設定を終える前は、そもそも
+    どちらも登録されていないので何もしない。
+    """
+    if not is_setup_complete(load_config()):
+        return
+
+    def work() -> None:
+        try:
+            fixed = startup.realign()
+        except Exception as e:
+            log(f'警告: 置き場所の確認でつまずきました ({e})')
+            return
+        if fixed:
+            log(f"置き場所が変わっていたので、{' と '.join(fixed)}を登録し直しました")
+
+    threading.Thread(target=work, daemon=True).start()
+
+
 def main() -> None:
     sys.excepthook = _log_uncaught
 
@@ -445,6 +471,8 @@ def main() -> None:
         view.loadFinished.disconnect(_show_first)
         QTimer.singleShot(0, lambda: show_window(win, view, feed))
         QTimer.singleShot(0, lambda: feeds.flush_outbox_async(load_config()))
+        # 引っ越していないかも、起動したときに 1 回だけ見る。
+        QTimer.singleShot(REALIGN_DELAY_MS, _realign_async)
         # 新しい版が出ていないかは、起動したときに 1 回だけ見る。
         # 少し遅らせるのは、窓が出るまでの間にネットワークを待たせないため。
         QTimer.singleShot(UPDATE_CHECK_DELAY_MS, update_feed.refresh)

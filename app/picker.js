@@ -162,13 +162,34 @@ function buildFavButton(item) {
   fav.className = 'pick-fav' + (on ? ' on' : '');
   fav.textContent = on ? '★' : '☆';
   fav.title = on ? 'よく使うものから外す' : 'よく使うものに入れる';
-  // click だと行の mousedown が先に走って決定されてしまう。
-  fav.addEventListener('mousedown', e => {
+  fixMousedown(fav, () => toggleFav(item, state.kind));
+  return fav;
+}
+
+// いま既定になっているか。既定の行には「既定」タグが出るので、ピンは出さない。
+function isDefaultItem(item) {
+  if (state.kind === 'list') return String(item.id) === String(DEFAULT_LIST.id);
+  if (state.kind === 'due')  return item.id === DEFAULT_DUE;
+  return false;                    // 担当者に既定は無い（自分が既定）
+}
+
+function buildPinButton(item) {
+  const pin = document.createElement('button');
+  pin.type = 'button';
+  pin.className = 'pick-pin';
+  pin.textContent = '⌂';
+  pin.title = 'これを既定にする';
+  fixMousedown(pin, () => setDefault(item, state.kind));
+  return pin;
+}
+
+// 行の上に載せたボタンは、行の mousedown より先に自分の用事を済ませる。
+function fixMousedown(el, run) {
+  el.addEventListener('mousedown', e => {
     e.preventDefault();
     e.stopPropagation();
-    toggleFav(item, state.kind);
+    run();
   });
-  return fav;
 }
 
 function buildPickerRow(row, index, tokens) {
@@ -199,6 +220,8 @@ function buildPickerRow(row, index, tokens) {
     el.appendChild(tag);
   }
 
+  // 既定はリストと期限にしかない。まだ既定でないものだけ、ここから移せる。
+  if (state.kind !== 'user' && !isDefaultItem(row.item)) el.appendChild(buildPinButton(row.item));
   // 期限は数が決まっているので★を付ける意味がない。
   if (state.kind !== 'due') el.appendChild(buildFavButton(row.item));
 

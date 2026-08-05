@@ -235,6 +235,10 @@ def is_setup_complete(cfg: dict) -> bool:
 # 画面から来る種別と、設定ファイルの欄の対応。
 FAVORITE_KEYS = {'list': 'favorite_lists', 'user': 'favorite_members'}
 
+# 既定として保存できる期限。画面（ui.js の DUE_PRESETS）と同じ並び。
+# 期限そのものの計算は clickup_api.due_at にある。ここは「保存してよい値か」を見るためだけ。
+DUE_PRESETS = ('today', 'tomorrow', 'd3', 'week', 'd7', 'none')
+
 
 def favorites(cfg: dict) -> dict:
     """画面へ渡す形（文字列の並び）でよく使うものを取り出す。"""
@@ -268,3 +272,23 @@ def remember_list(cfg: dict, list_id: str) -> dict:
         return cfg
     kept = [x for x in cfg.get('recent_lists', []) if str(x) != list_id]
     return {**cfg, 'recent_lists': [list_id, *kept][:RECENT_MAX]}
+
+
+def set_default_list(cfg: dict, list_id: str) -> dict:
+    """既定の登録先を差し替えた新しい設定を返す。
+
+    新しい既定は「最近使った」から外す。候補の先頭に別枠で出るので、
+    残しておくと同じものが二度並ぶ（remember_list と裏表の関係）。
+    """
+    list_id = str(list_id or '')
+    if not list_id:
+        return cfg
+    kept = [str(x) for x in cfg.get('recent_lists', []) if str(x) != list_id]
+    return {**cfg, 'list_id': list_id, 'recent_lists': kept}
+
+
+def set_default_due(cfg: dict, preset: str) -> dict:
+    """既定の期限を差し替えた新しい設定を返す。決まった 6 つ以外は受け付けない。"""
+    if preset not in DUE_PRESETS:
+        return cfg
+    return {**cfg, 'default_due_preset': preset}

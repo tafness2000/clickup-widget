@@ -135,6 +135,74 @@ function toggleFav(item, kind) {
   renderPicker();
 }
 
+// ── 既定の入れ替え ────────────────────────────────────────
+
+// ★と違って既定は 1 つだけ。押したものへ移す。
+// 初回設定でしか決められなかったものを、後からでも変えられるようにするための入口。
+function setDefault(item, kind) {
+  if (kind === 'list')     setDefaultList(item);
+  else if (kind === 'due') setDefaultDue(item);
+}
+
+function redrawDefault() {
+  if (isOpen()) renderPicker();      // 返事が来る頃には閉じていることがある
+  renderTargets();
+}
+
+// ピンを押してもパネルは閉じないので、返事を待つあいだに別の行を選べてしまう。
+// あとから届いた古い返事で、そのあとの操作を巻き戻さないための世代番号。
+let listSeq = 0;
+let dueSeq  = 0;
+
+function setDefaultList(item) {
+  if (String(item.id) === String(DEFAULT_LIST.id)) return;
+  const seq    = ++listSeq;
+  const before = { list: DEFAULT_LIST, recent: RECENT, picked: pickedList };
+  // 既定を選んだままなら新しい既定へ追随する。手で別のリストに変えてあるなら触らない。
+  const follow = isDefaultList();
+  DEFAULT_LIST = item;
+  RECENT = RECENT.filter(id => String(id) !== String(item.id));   // 既定は別枠で出る
+  if (follow) pickedList = item;
+  redrawDefault();
+
+  if (!bridge) return;
+  bridge.setDefaultList(String(item.id), raw => {
+    if (seq !== listSeq) return;        // もっと新しい操作が走っている。この返事は捨てる
+    const res = JSON.parse(raw);
+    if (res.ok) {
+      if (res.default_list) DEFAULT_LIST = res.default_list;   // 名前や親パスを整えたもの
+    } else {
+      DEFAULT_LIST = before.list;
+      RECENT       = before.recent;
+      // 待っているあいだに選び直していたら、そちらを尊重する。
+      if (pickedList === item) pickedList = before.picked;
+      showError(res.error || '既定を変えられませんでした');
+    }
+    redrawDefault();
+  });
+}
+
+function setDefaultDue(item) {
+  if (item.id === DEFAULT_DUE) return;
+  const seq    = ++dueSeq;
+  const before = { due: DEFAULT_DUE, picked: pickedDue };
+  const follow = isDefaultDue();
+  DEFAULT_DUE = item.id;
+  if (follow) pickedDue = item;
+  redrawDefault();
+
+  if (!bridge) return;
+  bridge.setDefaultDue(item.id, raw => {
+    if (seq !== dueSeq) return;
+    const res = JSON.parse(raw);
+    if (res.ok) return;
+    DEFAULT_DUE = before.due;
+    if (pickedDue === item) pickedDue = before.picked;
+    showError(res.error || '既定を変えられませんでした');
+    redrawDefault();
+  });
+}
+
 
 // ── フォーム ──────────────────────────────────────────────
 

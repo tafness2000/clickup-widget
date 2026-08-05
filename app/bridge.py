@@ -44,39 +44,6 @@ UPDATER_WAIT_SEC   = 0.25
 UPDATER_WAIT_STEPS = 20
 
 
-def _autostart_target() -> tuple[str, str, str]:
-    """サインイン時に起動するもの。(実行するファイル, 引数, 作業フォルダ)。
-
-    配布版は app/ の隣に runtime/ がある。そこの pythonw.exe を直に指すことで、
-    サインインのたびに黒い窓が一瞬出るのを避ける。
-    """
-    base = appconfig.BASE
-    bundled_py = os.path.join(os.path.dirname(base), 'runtime', 'pythonw.exe')
-    if os.path.exists(bundled_py):
-        return bundled_py, f'"{os.path.join(base, "pause.pyw")}"', base
-    return os.path.join(base, 'launch.bat'), '', base
-
-
-def _enable_autostart() -> tuple[bool, str]:
-    """自動起動とウォッチドッグをまとめて有効にする。
-
-    自動起動が入れば「次から勝手に立ち上がる」は満たせるので、
-    見張り役だけ失敗しても全体は成功として扱い、理由だけ残す。
-    """
-    target, args, workdir = _autostart_target()
-    ok, out = startup.enable_autostart(target, workdir, args)
-    if not ok:
-        appconfig.log(f'警告: 自動起動を登録できませんでした ({out})')
-        return False, out
-
-    watch_ok, watch_out = startup.enable_watchdog(appconfig.bundled('register-watchdog.ps1'))
-    if not watch_ok:
-        appconfig.log(f'警告: ウォッチドッグを登録できませんでした ({watch_out})')
-        return True, '見張り役の登録だけできませんでした（自動起動は有効です）'
-    appconfig.log('自動起動とウォッチドッグを登録しました')
-    return True, ''
-
-
 def _http_error(e: Exception) -> str:
     if isinstance(e, urllib.error.HTTPError):
         return f'ClickUp エラー: {e.code}'
@@ -276,6 +243,40 @@ class Bridge(QObject):
         except Exception as e:
             appconfig.log(f'警告: よく使うものを保存できませんでした ({e})')
 
+    @pyqtSlot(str, result=str)
+    def setDefaultList(self, list_id: str) -> str:
+        """既定の登録先を入れ替える。初回設定でしか決められなかったものを、後からでも変えられるように。"""
+        list_id = str(list_id or '').strip()
+        data  = directory.load(appconfig.BASE)
+        known = {str(item.get('id')) for item in data.get('lists', [])}
+        # 控えが空のときも断る。「候補が出ないから押されないはず」は画面側の都合であって、
+        # ここで守れることではない。控えに実在するものだけを通す。
+        if not list_id or list_id not in known:
+            return json.dumps({'ok': False, 'error': 'そのリストは見つかりませんでした'})
+        try:
+            updated = appconfig.update_config(
+                lambda cfg: directory.fill_names(appconfig.set_default_list(cfg, list_id), data))
+        except Exception as e:
+            appconfig.log(f'警告: 既定の登録先を保存できませんでした ({e})')
+            return json.dumps({'ok': False, 'error': '保存できませんでした'})
+        appconfig.log(f"既定の登録先を変えました（{updated.get('list_name') or list_id}）")
+        return json.dumps({'ok': True, 'default_list': directory.default_list_entry(updated, data)},
+                          ensure_ascii=True)
+
+    @pyqtSlot(str, result=str)
+    def setDefaultDue(self, preset: str) -> str:
+        """既定の期限を入れ替える。決まった 6 つ以外は受け付けない。"""
+        preset = str(preset or '').strip()
+        if preset not in appconfig.DUE_PRESETS:
+            return json.dumps({'ok': False, 'error': 'その期限は選べません'})
+        try:
+            appconfig.update_config(lambda cfg: appconfig.set_default_due(cfg, preset))
+        except Exception as e:
+            appconfig.log(f'警告: 既定の期限を保存できませんでした ({e})')
+            return json.dumps({'ok': False, 'error': '保存できませんでした'})
+        appconfig.log(f'既定の期限を変えました（{preset}）')
+        return json.dumps({'ok': True, 'default_due': preset})
+
     @pyqtSlot(str)
     def openTask(self, url: str) -> None:
         """一覧の行から ClickUp を開く。
@@ -378,8 +379,36 @@ class Bridge(QObject):
         if not autostart:
             return json.dumps({'ok': True, 'autostart': False})
 
-        started, note = _enable_autostart()
+        started, note = startup.enable_all()
         return json.dumps({'ok': True, 'autostart': started, 'note': note})
+
+    @pyqtSlot(result=str)
+    def appFolder(self) -> str:
+        """いま動いているフォルダの場所。初回設定の最初に見せる。"""
+        return gitupdate.repo_root()
+
+    @pyqtSlot()
+    def openAppFolder(self) -> None:
+        """そのフォルダをエクスプローラーで開く。場所を自分で探させない。"""
+        try:
+            os.startfile(gitupdate.repo_root())      # 開く先は自分の居場所だけ
+        except OSError as e:
+            appconfig.log(f'警告: フォルダを開けませんでした ({e})')
+
+    @pyqtSlot()
+    def quitApp(self) -> None:
+        """常駐ごと終わらせる。フォルダを動かせるようにするための出口。
+
+        設定を終えたあとは終わらせない。その時点で見張り役が登録済みなので、
+        終わったつもりでフォルダを動かしている最中に立ち上がってしまう。
+        「終わったのに動かせない」より「引っ込むだけ」の方が筋が通る。
+        """
+        if appconfig.is_setup_complete(appconfig.load_config()):
+            appconfig.log('設定が済んでいるので、終了せずに引っ込めます')
+            self.startApp()
+            return
+        appconfig.log('初回設定の画面から終了しました')
+        QTimer.singleShot(0, QApplication.quit)
 
     @pyqtSlot()
     def startApp(self) -> None:

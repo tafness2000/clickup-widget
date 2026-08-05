@@ -277,6 +277,13 @@ def load_setup():
 
 def start_setup(_ok):
     view.loadFinished.disconnect(start_setup)
+    # 置き場所は Bridge が入れる。ここは繋いでいないので、架空のパスを流し込む。
+    js(r'document.getElementById("pathBox").textContent = "C:\\Tools\\ClickUpWidget";')
+    grab('setup-0', shot_setup1)
+
+
+def shot_setup1():
+    js('document.getElementById("next0").click();')
     grab('setup-1', shot_setup2)
 
 

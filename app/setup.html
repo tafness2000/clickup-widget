@@ -59,9 +59,13 @@
 
   /* ── 進み具合 ── */
 
-  .steps {
-    display: flex; align-items: center; gap: 6px;
+  .topbar {
+    display: flex; align-items: center; gap: 10px;
     margin-bottom: 14px;
+  }
+  .steps {
+    flex: 1 1 auto;
+    display: flex; align-items: center; gap: 6px;
   }
   .steps .dot {
     flex: 1 1 0; height: 3px; border-radius: 2px;
@@ -69,6 +73,21 @@
     transition: background 0.2s;
   }
   .steps .dot.done { background: var(--accent); }
+
+  /* どの手順からでも抜けられるようにする。
+     フォルダを別の場所へ置きたくなったとき、閉じられないと動かせなくなるため。 */
+  .quit {
+    flex: none;
+    width: 22px; height: 22px;
+    display: flex; align-items: center; justify-content: center;
+    border: none; background: transparent;
+    color: var(--text-dim);
+    font-family: inherit; font-size: 15px; line-height: 1;
+    cursor: pointer; padding: 0;
+    border-radius: 6px;
+    transition: background 0.12s, color 0.12s;
+  }
+  .quit:hover { background: rgba(255,255,255,0.12); color: var(--text); }
 
   .title {
     font-size: 16px; font-weight: 600;
@@ -155,6 +174,20 @@
     gap: 10px; margin-top: auto; padding-top: 12px;
   }
   .footer .note { font-size: 10.5px; color: var(--text-dim); }
+  .footer .actions { display: flex; align-items: center; gap: 8px; }
+
+  /* ── 置き場所 ── */
+
+  .path-box {
+    background: rgba(255,255,255,0.05);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    padding: 10px 12px;
+    margin-bottom: 10px;
+    font-size: 11.5px; line-height: 1.65;
+    color: var(--text);
+    word-break: break-all;            /* 長いパスでも枠の外へ出さない */
+  }
 
   /* ── リスト選び ── */
 
@@ -229,15 +262,61 @@
 </style>
 </head>
 <body>
-  <div class="steps">
-    <div class="dot done" id="dot1"></div>
-    <div class="dot" id="dot2"></div>
-    <div class="dot" id="dot3"></div>
-    <div class="dot" id="dot4"></div>
+  <div class="topbar">
+    <div class="steps">
+      <div class="dot done" id="dot0"></div>
+      <div class="dot" id="dot1"></div>
+      <div class="dot" id="dot2"></div>
+      <div class="dot" id="dot3"></div>
+      <div class="dot" id="dot4"></div>
+    </div>
+    <button class="quit" id="quitBtn" title="終了する" aria-label="終了する">✕</button>
+  </div>
+
+  <!-- 0. 置き場所 -->
+  <div class="page on" id="page0">
+    <div class="title">この場所から始めます</div>
+    <div class="lead">
+      Click Up Widget は、いまこのフォルダの中から動いています。
+    </div>
+
+    <div class="path-box" id="pathBox">確認しています…</div>
+
+    <button class="ghost wide" id="openFolderBtn">
+      <svg viewBox="0 0 16 16" fill="none" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M2 4.5A1.5 1.5 0 013.5 3h2.6l1.4 1.6h5A1.5 1.5 0 0114 6.1v5.4a1.5 1.5 0 01-1.5 1.5h-9A1.5 1.5 0 012 11.5z"/>
+      </svg>
+      このフォルダを開いて確かめる
+    </button>
+
+    <div class="howto">
+      <ol>
+        <li>この場所でよければ、そのまま <b>次へ</b></li>
+        <li>別の場所へ置きたいときは <b>終了する</b> を押し、フォルダごと移動してから開き直す</li>
+      </ol>
+    </div>
+
+    <div class="keys">
+      <div>
+        <kbd>Ctrl</kbd> + <kbd>Shift</kbd> + <kbd>Space</kbd>
+      </div>
+      <div class="cap">
+        設定が終われば、次からはこのキーだけで呼び出せます。<br />
+        このフォルダを開く必要はありません。
+      </div>
+    </div>
+
+    <div class="footer">
+      <div class="note">あとから移動しても設定は自動で直ります</div>
+      <div class="actions">
+        <button class="ghost" id="quit0">終了する</button>
+        <button class="primary" id="next0">次へ</button>
+      </div>
+    </div>
   </div>
 
   <!-- 1. トークン -->
-  <div class="page on" id="page1">
+  <div class="page" id="page1">
     <div class="title">ClickUp とつなぎます</div>
     <div class="lead">下のボタンで ClickUp の設定画面が開きます。手順どおりに進めてください。</div>
 
@@ -345,7 +424,11 @@
     const $ = id => document.getElementById(id);
 
     let bridge = null;
-    new QWebChannel(qt.webChannelTransport, ch => { bridge = ch.objects.bridge; });
+    new QWebChannel(qt.webChannelTransport, ch => {
+      bridge = ch.objects.bridge;
+      // いまいる場所を最初の画面に出す。textContent なので、パスに何が入っていても崩れない。
+      bridge.appFolder(path => { $('pathBox').textContent = path || '(場所を取得できませんでした)'; });
+    });
 
     function setBackdrop(uri) {
       document.documentElement.style.setProperty('--backdrop', 'url("' + uri + '")');
@@ -358,11 +441,26 @@
     let picked = null;
 
     function goto(step) {
-      for (let i = 1; i <= 4; i++) {
+      for (let i = 0; i <= 4; i++) {
         $('page' + i).classList.toggle('on', i === step);
         $('dot' + i).classList.toggle('done', i <= step);
       }
+      // 最後の手順では終了ボタンを引っ込める。ここへ来た時点で見張り役が登録済みなので、
+      // 終わらせても数分で立ち上がり直してしまう。この手順の出口は「閉じる」だけにする。
+      $('quitBtn').style.display = step === 4 ? 'none' : '';
     }
+
+    // ── 0. 置き場所 ───────────────────────────────────────────
+
+    function quit() { if (bridge) bridge.quitApp(); }
+
+    $('quitBtn').addEventListener('click', quit);
+    $('quit0').addEventListener('click', quit);
+    $('openFolderBtn').addEventListener('click', () => { if (bridge) bridge.openAppFolder(); });
+    $('next0').addEventListener('click', () => {
+      goto(1);
+      setTimeout(() => $('tokenInput').focus(), 50);
+    });
 
     function say(id, text, kind) {
       const el = $(id);
