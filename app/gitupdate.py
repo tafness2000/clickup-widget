@@ -23,10 +23,18 @@ LOG_DIR     = 'update-log'
 BACKUP_DIR  = 'backup'
 
 # 更新のときに必ず控えておくもの。無くなると設定のやり直しになる。
+# outbox は中断メモの本文がそのまま（暗号化なしで）入る。控えを重ねると
+# 平文の写しが増え続けるので、直近だけ残して古いものは捨てる。
 PROTECTED = ['config.json', 'directory.json', 'outbox.json', 'outbox_failed.json']
+
+# 残しておく控えの数。戻したくなるのはたいてい直前の 1 回なので、多くは要らない。
+BACKUP_KEEP = 3
 
 TIMEOUT = 60
 CREATE_NO_WINDOW = 0x08000000
+
+# 更新の見出し 1 行の長さ。これ以上は切る（画面からはみ出すため）。
+SUMMARY_MAX = 90
 
 
 def repo_root() -> str:
@@ -155,11 +163,18 @@ def check_status(fetch: bool = True) -> dict:
 
 
 def changes_summary(limit: int = 8) -> list[str]:
-    """取り込むと何が変わるか。コミットの見出しを新しい順に。"""
+    """取り込むと何が変わるか。コミットの見出しを新しい順に。
+
+    この一覧は「取り込んでよいか」を人が決める唯一の手がかりになる。
+    コミットの見出しは誰でも好きに書けるので、文字の並ぶ向きを変える制御文字を
+    落としてから渡す（入れておくと、危ない変更を無害に見せかけられる）。
+    長すぎるものも切る。画面からはみ出して後ろが見えなくなるため。
+    """
     ok, out = run_git('log', '--oneline', f'-{limit}', 'HEAD..@{u}')
     if not ok or not out:
         return []
-    return [line.strip() for line in out.splitlines() if line.strip()]
+    return [appconfig.plain(line.strip())[:SUMMARY_MAX]
+            for line in out.splitlines() if line.strip()]
 
 
 # ── 状態の保存 ────────────────────────────────────────────────

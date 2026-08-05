@@ -14,6 +14,7 @@ QtWebEngineProcess.exe は The Qt Company、git.exe は Git for Windows の署�
 あるので、そのまま通る。
 """
 import base64
+import hashlib
 import os
 import re
 import shutil
@@ -117,6 +118,13 @@ def prune_qt(qt6: Path) -> None:
 
 MINGIT_CACHE = HERE / '.cache'
 
+# 同梱する Git。落としたものが本物かを、公式が公表している値と突き合わせて確かめる。
+# 署名の確認は exe しか見ないので、DLL をすり替えられても気づけない。
+# 上げるときは Git for Windows のリリースノートに載っている値をそのまま書き写す。
+#   https://github.com/git-for-windows/git/releases
+MINGIT_ZIP    = 'MinGit-2.55.0.3-64-bit.zip'
+MINGIT_SHA256 = 'f48e2d2dc74a24454adc6d8fd0ac25bf9c2386f19cfb06202b9465aaad4f9f05'
+
 # MinGit には署名の無い実行ファイルが 74 個入っている（Unix ツール群と補助のもの）。
 # Smart App Control はそれを弾くので、同梱するわけにいかない。
 # 使うのは HTTPS 経由の fetch / pull / status だけなので、下記を落としても動く
@@ -153,16 +161,22 @@ def copy_mingit() -> None:
         return
 
     MINGIT_CACHE.mkdir(exist_ok=True)
-    # busybox 版は中身が絞られていて、うまく動かないことがある。通常版を使う。
-    cached = next((p for p in sorted(MINGIT_CACHE.glob('MinGit-*-64-bit.zip'))
-                   if 'busybox' not in p.name), None)
-    if cached is None:
+    cached = MINGIT_CACHE / MINGIT_ZIP
+    if not cached.exists():
         raise SystemExit(
-            'MinGit が見つかりません。次で取得してから、もう一度ビルドしてください:\n'
+            f'{MINGIT_ZIP} が見つかりません。次で取得してから、もう一度ビルドしてください:\n'
             '  gh release download --repo git-for-windows/git --pattern "MinGit-*-64-bit.zip" '
             f'--dir "{MINGIT_CACHE}"')
 
-    print(f'  Git: {cached.name} を展開します')
+    digest = hashlib.sha256(cached.read_bytes()).hexdigest()
+    if digest != MINGIT_SHA256:
+        raise SystemExit(
+            f'{MINGIT_ZIP} の中身が、公式の値と一致しません。配布できません。\n'
+            f'  手元    : {digest}\n'
+            f'  あるべき: {MINGIT_SHA256}\n'
+            '（落とし直すか、版を上げたなら build.py の値も直してください）')
+
+    print(f'  Git: {cached.name} を展開します（SHA256 一致）')
     GIT_DIR.mkdir(parents=True, exist_ok=True)
     with zipfile.ZipFile(cached) as zf:
         zf.extractall(GIT_DIR)
@@ -244,6 +258,20 @@ def copy_extras() -> None:
         shutil.copy(HERE / name, undo / name)
 
 
+def _force_rmtree(path: Path) -> None:
+    """消せないファイルがあっても片付ける。
+
+    Git のパックファイルは読み取り専用で作られる。ふつうに消そうとすると
+    アクセス拒否になり、ignore_errors だと黙って残る（残ると次の clone が拒まれる）。
+    """
+    def on_error(func, name, _exc):
+        os.chmod(name, 0o700)
+        func(name)
+
+    if path.exists():
+        shutil.rmtree(path, onexc=on_error)
+
+
 def make_repo() -> None:
     """配布物そのものを Git のリポジトリにする。
 
@@ -265,8 +293,8 @@ def make_repo() -> None:
 
     # 前回こけたときの残骸があると clone が拒まれる。先に片付ける。
     work = DIST_DIR / '.gitwork'
-    shutil.rmtree(work, ignore_errors=True)
-    shutil.rmtree(DIST_DIR / '.git', ignore_errors=True)
+    _force_rmtree(work)
+    _force_rmtree(DIST_DIR / '.git')
 
     ok, out = _git('clone', '--depth', '1', '--branch', _current_branch(),
                    remote, str(work), cwd=str(HERE))
@@ -274,8 +302,30 @@ def make_repo() -> None:
         raise SystemExit(f'配布物をリポジトリにできませんでした: {out[:200]}')
 
     # clone した中身のうち .git だけを残し、ファイルは build が作ったものを使う。
+    # move 先が残っていると「中へ入れる」動きになり、.git\.git という
+    # 壊れた形ができる（Python の shutil.move の仕様）。上で消したので無いはず。
+    if (DIST_DIR / '.git').exists():
+        raise SystemExit('前回の .git を片付けられませんでした。'
+                         'dist を手で消してからやり直してください。')
     shutil.move(str(work / '.git'), str(DIST_DIR / '.git'))
-    shutil.rmtree(work, ignore_errors=True)
+    _force_rmtree(work)
+
+    _verify_repo(remote, head)
+
+
+def _verify_repo(remote: str, head: str) -> None:
+    """配布物が、それ自身のリポジトリとして成り立っているか。
+
+    .git が壊れていると、git は黙って親のフォルダまで遡って別のリポジトリを
+    答える。dist は開発リポジトリの中にあるので、壊れていても「動いているように」
+    見えてしまう。どこを見ているかを直に確かめる。
+    """
+    ok, git_dir = _git('rev-parse', '--absolute-git-dir', cwd=str(DIST_DIR))
+    expected = (DIST_DIR / '.git').resolve()
+    if not ok or Path(git_dir).resolve() != expected:
+        raise SystemExit('配布物のリポジトリが壊れています。\n'
+                         f'  git が見ている先: {git_dir}\n'
+                         f'  あるべき場所    : {expected}')
 
     ok, cloned_head = _git('rev-parse', 'HEAD', cwd=str(DIST_DIR))
     print(f'  リポジトリ: {remote}  HEAD={cloned_head[:7]}')
@@ -385,7 +435,7 @@ def make_zip() -> None:
 
 if __name__ == '__main__':
     print('=== Step 1: 前回の出力を片付ける ===')
-    shutil.rmtree(DIST_DIR, ignore_errors=True)
+    _force_rmtree(DIST_DIR)          # .git のパックは読み取り専用なので力ずくで
     DIST_DIR.mkdir(parents=True, exist_ok=True)
 
     print('=== Step 2: Python と Qt と Git を同梱 ===')

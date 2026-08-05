@@ -38,6 +38,11 @@ import gitupdate
 # 先に差し替えておく（下の import より前でないと、各モジュールが古い値を掴む）。
 if len(sys.argv) > 1:
     _target = os.path.abspath(sys.argv[1])
+    # 常駐が置かれているフォルダかどうかだけ確かめる。
+    # でたらめな場所を渡されて、そこで git を動かしてしまわないため。
+    if not os.path.isfile(os.path.join(_target, 'pause.pyw')):
+        print(f'更新するフォルダとして受け取れません: {_target}', file=sys.stderr)
+        raise SystemExit(2)
     appconfig.BASE        = _target
     appconfig.CONFIG_PATH = os.path.join(_target, 'config.json')
     appconfig.LOG_PATH    = os.path.join(_target, 'pausetask.log')
@@ -98,7 +103,8 @@ def step_git_check(log: Log) -> None:
 
 def step_backup(log: Log) -> str:
     stamp  = time.strftime('%Y%m%d-%H%M%S')
-    target = os.path.join(appconfig.BASE, gitupdate.BACKUP_DIR, f'backup-{stamp}')
+    root   = os.path.join(appconfig.BASE, gitupdate.BACKUP_DIR)
+    target = os.path.join(root, f'backup-{stamp}')
     gitupdate.set_run_state('running', 'backup-data', 18, '設定と未送信分を控えています',
                             log.path, target)
     os.makedirs(target, exist_ok=True)
@@ -109,7 +115,23 @@ def step_backup(log: Log) -> str:
             shutil.copy2(src, os.path.join(target, name))
             saved += 1
     log.write(f'控えました: {saved} 件 → {target}')
+    _drop_old_backups(log, root)
     return target
+
+
+def _drop_old_backups(log: Log, root: str) -> None:
+    """古い控えを捨てる。
+
+    中断メモの本文がそのまま入っているので、何年ぶんも積み上げない。
+    戻したくなるのは直前の 1 回なので、数個あれば足りる。
+    """
+    try:
+        kept = sorted(name for name in os.listdir(root) if name.startswith('backup-'))
+    except OSError:
+        return
+    for name in kept[:-gitupdate.BACKUP_KEEP]:
+        shutil.rmtree(os.path.join(root, name), ignore_errors=True)
+        log.write(f'古い控えを消しました: {name}')
 
 
 def step_pull(log: Log, backup: str) -> str:

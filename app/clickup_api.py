@@ -8,6 +8,8 @@ from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timedelta
 from urllib.parse import quote, urlencode
 
+import appconfig
+
 API_ROOT = 'https://api.clickup.com/api/v2'
 TIMEOUT  = 10
 FEED_LIMIT = 5
@@ -279,15 +281,9 @@ def status_type(task: dict) -> str:
     return ((task.get('status') or {}).get('type') or '').lower()
 
 
-# 文字の並ぶ向きを変えてしまう制御文字。見えないまま表示だけ入れ替わるので、
-# タスク名で「完了ボタンの隣に別のものが見えている」ような細工ができてしまう。
-# 一覧にはワークスペースの誰でも自分宛てのタスクを載せられるので、落としておく。
-_BIDI_CONTROLS = str.maketrans('', '', '‪‫‬‭‮'
-                                       '⁦⁧⁨⁩‏‎')
-
-
-def _plain(text: str) -> str:
-    return (text or '').translate(_BIDI_CONTROLS)
+# 一覧にはワークスペースの誰でも自分宛てのタスクを載せられる。
+# 文字の並ぶ向きを変える制御文字は、appconfig 側でまとめて落とす。
+_plain = appconfig.plain
 
 
 def _summarize(task: dict) -> dict:
