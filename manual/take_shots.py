@@ -62,7 +62,7 @@ DIRECTORY = {
 
 FEED = [
     {'id': 't1', 'name': '見積書のチェック待ち', 'url': '', 'list_id': 'p1',
-     'list_name': 'Yamada', 'memo': '見積書_呉服橋.xlsx - Excel'},
+     'list_name': 'Yamada', 'memo': '見積書_日本橋案件.xlsx - Excel'},
     {'id': 't2', 'name': '田中さんの返事待ち', 'url': '', 'list_id': 's1',
      'list_name': 'Sales Activity', 'memo': ''},
     {'id': 't3', 'name': '図面の差し替え分を確認', 'url': '', 'list_id': 'p1',
@@ -80,7 +80,7 @@ def _due(days):
 
 WIDE = [
     {'id': 'w1', 'name': '見積書のチェック待ち', 'url': '', 'list_id': 'p1',
-     'list_name': 'Yamada', 'memo': '見積書_呉服橋.xlsx - Excel', 'status': 'to do', 'due': _due(0)},
+     'list_name': 'Yamada', 'memo': '見積書_日本橋案件.xlsx - Excel', 'status': 'to do', 'due': _due(0)},
     {'id': 'w2', 'name': '田中さんの返事待ち', 'url': '', 'list_id': 's1',
      'list_name': 'Sales Activity', 'memo': '', 'status': 'to do', 'due': _due(0)},
     {'id': 'w3', 'name': '図面の差し替え分を確認', 'url': '', 'list_id': 'p1',
@@ -177,7 +177,7 @@ def start_main(_ok=None):
     win.setFixedSize(layout.WIN_W, layout.WIN_H)
     win.show()
     js(f'setDirectory({json.dumps(DIRECTORY, ensure_ascii=True)});'
-       'resetForm("見積書_呉服橋.xlsx - Excel");'
+       'resetForm("見積書_日本橋案件.xlsx - Excel");'
        'taskInput.value = "";'
        f'setTasks({json.dumps({"ok": True, "tasks": FEED}, ensure_ascii=True)});')
     grab('main', shot_typed)
@@ -190,7 +190,7 @@ def shot_typed():
 
 
 def shot_pick_list():
-    js('resetForm("見積書_呉服橋.xlsx - Excel"); openPicker("list");'
+    js('resetForm("見積書_日本橋案件.xlsx - Excel"); openPicker("list");'
        'pickerList.children[0].classList.add("active");')
     grab('pick-list', shot_pick_list_search)
 

@@ -21,10 +21,10 @@ FETCH_WORKERS = 8
 # ClickUp のステータスには open / custom / done / closed の 4 種類がある。
 #
 # 完了として送る候補はこの順で探す。closed が先なのが肝心。
-# done 型は「片付いた」を意味するとは限らない。このワークスペースの Projects スペースは
-# mock / construction / inspection / maintenance … と工程を done 型で並べていて、
-# その先頭（mock）を完了として送ると、進行中の工程に差し戻したうえ、
-# 一覧を取り直すとまた出てくる（ClickUp が閉じたと見なすのは closed 型だけ）。
+# done 型は「片付いた」を意味するとは限らない。工程管理をしているリストでは
+# 「設計」「施工」「検査」…といった進行中の段階が done 型で並んでいることがあり、
+# その先頭を完了として送ると、進行中の工程へ差し戻したうえ、一覧を取り直すと
+# また出てくる（ClickUp が閉じたと見なすのは closed 型だけ）。
 COMPLETION_TYPES = ('closed', 'done')
 
 # 一覧から外す型。上と同じ理由で closed だけ。done 型まで外すと工程中のタスクが消える。
@@ -186,18 +186,18 @@ def fetch_directory(cfg: dict, on_warn=None) -> dict:
     }
 
 
-# 各人の中断メモの置き場は、このスペースの下に名字のリストとして並んでいる
-# （Furukawa / Okada / Sakka …）。初回設定で 200 件の中から探させると
-# 「どれが自分のものか」で必ず止まるので、名前から当たりを付けて選んでおく。
+# 各人の置き場所を、このスペースの下に「名字のリスト」として並べている前提。
+# 初回設定で 200 件の中から探させると「どれが自分のものか」で必ず止まるので、
+# 表示名から当たりを付けて選んでおく。
+# この並べ方をしていないワークスペースでは、単に見つからず従来どおり選ぶことになる。
 PERSONAL_SPACE_NAME = 'Personal Work space'
 
 
 def guess_personal_list(lists: list[dict], user_name: str) -> dict | None:
     """その人の置き場所を推測する。見当が付かなければ None（従来どおり選んでもらう）。
 
-    ClickUp の表示名は「姓 名」と「名 姓」が混ざっている（Furukawa Takuya /
-    yoshifumi okada）ので、空白で割った断片のどれかがリスト名と一致すれば
-    その人のものと見なす。取り違えるより、選ばせる方に倒す。
+    ClickUp の表示名は「姓 名」と「名 姓」が混ざっているので、空白で割った断片の
+    どれかがリスト名と一致すればその人のものと見なす。取り違えるより、選ばせる方に倒す。
     """
     parts = {p.lower() for p in re.split(r'[\s　]+', user_name or '') if p}
     if not parts:

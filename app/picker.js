@@ -2,13 +2,13 @@
 // 状態（DIR / FAV / picked*）は ui.js が持っている。ここは探し方と見せ方だけ。
 // ── 検索 ──────────────────────────────────────────────────
 
-// 全角スペースも区切りとして扱う。「hilton kyoto」でも「hotel archive kyoto」でも当たる。
+// 全角スペースも区切りとして扱う。「grand kyoto」でも「archive grand kyoto」でも当たる。
 function tokenize(q) {
   return (q || '').toLowerCase().split(/[\s　]+/).filter(Boolean);
 }
 
-// 打った並びそのままで当たったものを上に。「six senses」で「SixSenses」より
-// 「Six Senses」が先に来てほしい、という当たり前の期待に合わせる。
+// 打った並びそのままで当たったものを上に。「blue moon」で「BlueMoon」より
+// 「Blue Moon」が先に来てほしい、という当たり前の期待に合わせる。
 function rankList(item, tokens, phrase) {
   const name = item.name.toLowerCase();
   const path = (item.path || '').toLowerCase();
