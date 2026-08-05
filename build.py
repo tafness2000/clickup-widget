@@ -201,10 +201,16 @@ def write_path_file() -> None:
         'Lib\nDLLs\nLib\\site-packages\n.\nimport site\n', encoding='utf-8')
 
 
-def copy_app() -> None:
-    APP_DIR.mkdir(parents=True, exist_ok=True)
-    for name in APP_FILES:
-        shutil.copy(SRC_APP / name, APP_DIR / name)
+def check_app_files() -> None:
+    """配布物に、あるべきものが揃っているか。
+
+    中身は clone がそのまま持ってくるので、ここではコピーしない。
+    コミットし忘れたファイルがあると欠けるので、それを見つけるための確認。
+    """
+    missing = [name for name in APP_FILES if not (APP_DIR / name).exists()]
+    if missing:
+        raise SystemExit('配布物に足りないファイルがあります: ' + ', '.join(missing)
+                         + '\n（コミットと push を忘れていませんか）')
 
     # 中身は初回設定の画面から書き込まれる。空の器だけ置いておく。
     (APP_DIR / 'config.json').write_text(
@@ -278,6 +284,10 @@ def make_repo() -> None:
     利用者のフォルダで git pull できるようにするため、いまの HEAD を
     そのまま clone してくる。--depth 1 にするのは、履歴まで配ると
     zip が大きくなるうえ、利用者が過去へ戻る用事がないため。
+
+    大事なのは、clone した中身をそのまま配布物にすること。
+    ビルドが別に用意したファイルを重ねると、Git から見て「全部書き換えられた」
+    状態になり（改行コードの違いでも起きる）、初日から更新できなくなる。
     """
     ok, remote = _git('config', '--get', 'remote.origin.url')
     if not ok or not remote:
@@ -301,13 +311,14 @@ def make_repo() -> None:
     if not ok:
         raise SystemExit(f'配布物をリポジトリにできませんでした: {out[:200]}')
 
-    # clone した中身のうち .git だけを残し、ファイルは build が作ったものを使う。
-    # move 先が残っていると「中へ入れる」動きになり、.git\.git という
-    # 壊れた形ができる（Python の shutil.move の仕様）。上で消したので無いはず。
+    # clone した中身を丸ごと配布物へ移す。.git だけでなくファイルもそのまま使う。
+    # ここで build が作ったものに差し替えると、改行コードの違いだけで
+    # Git は「書き換えられた」と見なし、更新が一度も通らなくなる。
     if (DIST_DIR / '.git').exists():
         raise SystemExit('前回の .git を片付けられませんでした。'
                          'dist を手で消してからやり直してください。')
-    shutil.move(str(work / '.git'), str(DIST_DIR / '.git'))
+    for item in work.iterdir():
+        shutil.move(str(item), str(DIST_DIR / item.name))
     _force_rmtree(work)
 
     _verify_repo(remote, head)
@@ -438,16 +449,19 @@ if __name__ == '__main__':
     _force_rmtree(DIST_DIR)          # .git のパックは読み取り専用なので力ずくで
     DIST_DIR.mkdir(parents=True, exist_ok=True)
 
-    print('=== Step 2: Python と Qt と Git を同梱 ===')
+    # 先に clone する。配布物の中身は Git が持ってきたものをそのまま使う。
+    # あとから差し替えると、改行コードの違いだけで「書き換えられた」と見なされ、
+    # 利用者のところで一度も更新できなくなる。
+    print('=== Step 2: リポジトリから中身を取ってくる ===')
+    make_repo()
+
+    print('=== Step 3: Python と Qt と Git を同梱 ===')
     copy_runtime()
     copy_mingit()
 
-    print('=== Step 3: 常駐本体をコピー ===')
-    copy_app()
+    print('=== Step 4: Git に入れないものを用意する ===')
+    check_app_files()
     copy_extras()
-
-    print('\n=== Step 4: 更新できるようリポジトリにする ===')
-    make_repo()
 
     print('\n=== Step 5: 配布物の確認 ===')
     verify_layout()
