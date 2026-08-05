@@ -117,6 +117,29 @@ def prune_qt(qt6: Path) -> None:
 
 MINGIT_CACHE = HERE / '.cache'
 
+# MinGit には署名の無い実行ファイルが 74 個入っている（Unix ツール群と補助のもの）。
+# Smart App Control はそれを弾くので、同梱するわけにいかない。
+# 使うのは HTTPS 経由の fetch / pull / status だけなので、下記を落としても動く
+# （実際に clone → fetch → status → pull を通して確かめた。89.5MB → 60.8MB）。
+MINGIT_DROP_DIRS  = ['usr']
+MINGIT_DROP_FILES = [
+    r'mingw64\bin\blocked-file-util.exe', r'mingw64\bin\brotli.exe',
+    r'mingw64\bin\git-askpass.exe', r'mingw64\bin\git-askyesno.exe',
+    r'mingw64\bin\git-credential-helper-selector.exe',
+    r'mingw64\bin\printf_gettext.exe', r'mingw64\bin\printf_ngettext.exe',
+    r'mingw64\bin\proxy-lookup.exe', r'mingw64\bin\psl.exe',
+    r'mingw64\bin\scalar.exe',
+    r'cmd\git-receive-pack.exe', r'cmd\git-upload-pack.exe',
+]
+
+
+def prune_mingit() -> None:
+    """署名の無いものを落とす。残っていると check_signatures がビルドを止める。"""
+    for name in MINGIT_DROP_DIRS:
+        shutil.rmtree(GIT_DIR / name, ignore_errors=True)
+    for name in MINGIT_DROP_FILES:
+        (GIT_DIR / name).unlink(missing_ok=True)
+
 
 def copy_mingit() -> None:
     """Git を同梱する。利用者に別途インストールさせないため。
@@ -144,9 +167,13 @@ def copy_mingit() -> None:
     with zipfile.ZipFile(cached) as zf:
         zf.extractall(GIT_DIR)
 
+    prune_mingit()
+
     git_exe = GIT_DIR / 'cmd' / 'git.exe'
     if not git_exe.exists():
         raise SystemExit(f'展開したのに git.exe がありません: {git_exe}')
+    size = sum(p.stat().st_size for p in GIT_DIR.rglob('*') if p.is_file())
+    print(f'  Git: 署名の無いものを外して {size / 1024 / 1024:.1f} MB')
 
 
 def write_path_file() -> None:
@@ -236,13 +263,17 @@ def make_repo() -> None:
         for line in dirty.splitlines()[:5]:
             print(f'      {line}')
 
+    # 前回こけたときの残骸があると clone が拒まれる。先に片付ける。
+    work = DIST_DIR / '.gitwork'
+    shutil.rmtree(work, ignore_errors=True)
+    shutil.rmtree(DIST_DIR / '.git', ignore_errors=True)
+
     ok, out = _git('clone', '--depth', '1', '--branch', _current_branch(),
-                   remote, str(DIST_DIR / '.gitwork'), cwd=str(HERE))
+                   remote, str(work), cwd=str(HERE))
     if not ok:
         raise SystemExit(f'配布物をリポジトリにできませんでした: {out[:200]}')
 
     # clone した中身のうち .git だけを残し、ファイルは build が作ったものを使う。
-    work = DIST_DIR / '.gitwork'
     shutil.move(str(work / '.git'), str(DIST_DIR / '.git'))
     shutil.rmtree(work, ignore_errors=True)
 
