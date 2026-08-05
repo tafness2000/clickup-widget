@@ -1,0 +1,517 @@
+/* 外部のフォントは読まない。業務用のパソコンから、窓を出すたびに
+   Google のサーバーへ通信が出ていくのを避けるため。
+   Windows 11 の標準書体でほぼ同じ見た目になる。 */
+:root {
+  --backdrop: none;                      /* 表示直前に pause.pyw が差し込む */
+  --solid: #141416;                      /* 背景を撮れなかったときの地の色 */
+  --glass: rgba(14, 14, 16, 0.62);
+  /* 候補パネルは下の入力欄を透かさない。透けると候補の文字と混ざって読みにくい。 */
+  --panel: rgba(18, 18, 21, 0.985);
+  --border: rgba(255, 255, 255, 0.12);
+  --text: #F5F5F4;
+  --text-mid: #B5AFAA;
+  --text-dim: #8A857F;
+  --input-bg: rgba(255, 255, 255, 0.06);
+  --input-border: rgba(255, 255, 255, 0.14);
+  --input-focus: rgba(255, 255, 255, 0.45);
+  --accent: #F5F5F4;
+  --accent-hover: #E0DEDB;
+  --accent-text: #18181B;
+  --error: #F87171;
+  --radius-sm: 10px;
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+html, body {
+  width: 100%; height: 100%;
+  font-family: "Segoe UI Variable", "Segoe UI", "Yu Gothic UI", system-ui, sans-serif;
+  color: var(--text);
+  -webkit-font-smoothing: antialiased;
+  overflow: hidden;
+}
+
+html { background: var(--solid); }
+
+/* 角丸はウィンドウ側 (DWM) が切る。ここはガラス板の中身だけを組む。 */
+body {
+  background: transparent;
+  padding: 12px 14px 12px;
+}
+
+/* 表示直前に撮った背後の画像。粗い縮小画像を引き伸ばしてぼかす。
+   inset を負にしているのは、ぼかしで縁が薄まるのを板の外へ逃がすため。 */
+body::before {
+  content: '';
+  position: fixed;
+  inset: -40px;
+  background: var(--backdrop) center / cover no-repeat;
+  filter: blur(14px) saturate(1.6) brightness(0.42);
+  z-index: -2;
+}
+
+/* ガラスの色味。上端だけわずかに明るくして板らしさを出す。 */
+body::after {
+  content: '';
+  position: fixed;
+  inset: 0;
+  background:
+    linear-gradient(180deg, rgba(255,255,255,0.06) 0%, rgba(255,255,255,0) 45%),
+    var(--glass);
+  z-index: -1;
+}
+
+.field { margin-bottom: 7px; }
+
+.field label {
+  display: block;
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--text-mid);
+  margin-bottom: 4px;
+  letter-spacing: 0.2px;
+}
+
+input.task, textarea.memo {
+  width: 100%;
+  background: var(--input-bg);
+  border: 1.5px solid var(--input-border);
+  border-radius: var(--radius-sm);
+  padding: 8px 12px;
+  color: var(--text);
+  font-family: inherit;
+  outline: none;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+input.task {
+  font-size: 14px;
+  font-weight: 500;
+  height: 34px;
+}
+textarea.memo {
+  font-size: 12px;
+  resize: none;
+  height: 56px;
+  line-height: 1.5;
+}
+input.task::placeholder, textarea.memo::placeholder {
+  color: var(--text-dim);
+  font-weight: 400;
+}
+input.task:focus, textarea.memo:focus {
+  border-color: var(--input-focus);
+  box-shadow: 0 0 0 3px rgba(255,255,255,0.08);
+}
+
+/* ── 登録先（リスト・担当者） ── */
+
+/* 重なり順を持たせない。候補を開いている間は、暗幕とパネルの下に隠れる側。 */
+.targets {
+  display: flex; gap: 6px; align-items: center;
+  height: 30px;
+  margin-bottom: 7px;
+}
+
+.chip {
+  display: flex; align-items: center; gap: 5px;
+  min-width: 0; height: 30px;
+  padding: 0 11px;
+  background: rgba(255,255,255,0.07);
+  border: 1px solid var(--input-border);
+  border-radius: 15px;
+  color: var(--text-mid);
+  font-family: inherit; font-size: 11px;
+  cursor: pointer; outline: none;
+  transition: background 0.12s, border-color 0.12s, color 0.12s;
+}
+.chip:hover, .chip:focus { background: rgba(255,255,255,0.14); color: var(--text); }
+.chip:focus { border-color: var(--input-focus); }
+.chip-ico { flex: none; color: var(--text-dim); font-size: 11px; }
+.chip-label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* 既定から変えたら色を起こして「いつもと違う」を目立たせる */
+.chip.changed { background: var(--accent); color: var(--accent-text); border-color: var(--accent); }
+.chip.changed .chip-ico { color: var(--accent-text); opacity: 0.6; }
+
+/* 3 つとも中身なりの幅にする。余りを取りにいかせない。
+   幅で埋めるより、右が空いている方が「触れるもの」だと分かりやすいため。
+   長い名前は上限で頭打ちにして、そこから先は省略記号で切る。 */
+.chip-list { flex: 0 1 auto; min-width: 72px; max-width: 52%; }
+.chip-user { flex: 0 1 auto; min-width: 56px; max-width: 40%; }
+.chip-due  { flex: 0 0 auto; }
+
+/* ── お気に入りの★ ── */
+
+.pick-fav {
+  flex: none;
+  width: 26px; height: 26px;
+  display: flex; align-items: center; justify-content: center;
+  border: none; background: transparent;
+  color: var(--text-dim);
+  font-size: 13px; line-height: 1;
+  cursor: pointer; padding: 0;
+  border-radius: 6px;
+  opacity: 0;                        /* ふだんは隠す。並びの邪魔をしないため */
+  transition: opacity 0.12s, color 0.12s, background 0.12s;
+}
+.pick-row:hover .pick-fav,
+.pick-row.active .pick-fav { opacity: 1; }
+.pick-fav:hover { background: rgba(255,255,255,0.12); color: var(--text); }
+/* 付いているものは常に見せる。付いていることが並び順の理由なので。 */
+.pick-fav.on { opacity: 1; color: #FBBF24; }
+
+/* ── 期限のパネル ── */
+
+/* 候補が 6 つと決まっているので、検索欄なしで丈も詰める。
+   244px = 余白 16 + 6 件ぶん 228（1 件 38px）。
+   .open と同じ詳細度だと、あとに書いてある #picker.open の高さに負ける。
+   順番に頼らずに済むよう、両方のクラスを重ねて指定する。 */
+#picker.open.due {
+  height: 244px;
+}
+#picker.open.due .picker-search { display: none; }
+
+.pick-hint {
+  font-size: 9.5px; color: var(--text-dim);
+  margin-top: 1px;
+}
+
+/* ── 候補パネル ── */
+
+/* パネルの外を押したら戻れるようにする受け皿。窓ぜんぶを覆うので、
+   下に中断中の一覧があっても、閉じるつもりの一手で ClickUp が開いたりしない。
+   少し暗くしているのは「いまは選んでいる最中」だと見て分かるようにするため。 */
+#pickerScrim { display: none; }
+#pickerScrim.open {
+  display: block;
+  position: fixed; inset: 0;
+  background: rgba(0, 0, 0, 0.68);
+  z-index: 19;
+}
+
+/* 下寄せにして上を空ける。空いたところが「外」になる。
+   高さは中身に合わせず固定する。候補が減るたびにパネルの丈が変わると、
+   打っている最中に検索欄が動いて狙いが定まらないため。
+   328px = 余白 16 + 検索欄 36 + 候補 7 件ぶん 276（1 件 38px、8 件目がわずかに覗く）。 */
+#picker { display: none; }
+#picker.open {
+  display: flex; flex-direction: column;
+  position: fixed;
+  left: 8px; right: 8px; bottom: 8px;
+  height: 328px;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 8px;
+  box-shadow: 0 8px 28px rgba(0,0,0,0.55);
+  z-index: 20;
+}
+
+.picker-search {
+  flex: none;
+  width: 100%; height: 30px;
+  background: var(--input-bg);
+  border: 1.5px solid var(--input-border);
+  border-radius: 8px;
+  padding: 0 10px;
+  margin-bottom: 6px;
+  color: var(--text);
+  font-family: inherit; font-size: 12px;
+  outline: none;
+}
+.picker-search:focus { border-color: var(--input-focus); }
+.picker-search::placeholder { color: var(--text-dim); }
+
+.picker-list { flex: 1 1 auto; overflow-y: auto; overflow-x: hidden; min-height: 0; }
+.picker-list::-webkit-scrollbar { width: 6px; }
+.picker-list::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.14); border-radius: 3px; }
+
+.pick-row {
+  display: flex; align-items: center; gap: 7px;
+  padding: 4px 7px; border-radius: 7px;
+  cursor: pointer; min-width: 0;
+}
+.pick-row.active { background: rgba(255,255,255,0.13); }
+.pick-body { min-width: 0; flex: 1 1 auto; }
+.pick-name {
+  font-size: 12px; color: var(--text);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.pick-path {
+  font-size: 9.5px; color: var(--text-dim);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  margin-top: 1px;
+}
+.pick-row mark { background: transparent; color: #FFF; font-weight: 600; }
+.pick-tag {
+  flex: none;
+  font-size: 9px; color: var(--text-dim);
+  border: 1px solid var(--border);
+  border-radius: 4px; padding: 0 4px;
+}
+.pick-empty { font-size: 11px; color: var(--text-dim); padding: 6px 7px; }
+
+/* エラーはヒントと同じ行に出す。専用の行を空けておくと、その分ずっと隙間が残るため。 */
+.error {
+  font-size: 11px;
+  color: var(--error);
+  display: none;
+}
+
+.footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-top: 6px;
+}
+
+.hint {
+  font-size: 10px;
+  color: var(--text-dim);
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+.hint kbd {
+  background: rgba(255,255,255,0.08);
+  color: var(--text-mid);
+  padding: 1px 5px;
+  border-radius: 4px;
+  font-size: 9px;
+  font-family: inherit;
+  border: 1px solid var(--border);
+  font-weight: 500;
+}
+
+button.submit {
+  background: var(--accent);
+  color: var(--accent-text);
+  border: none;
+  padding: 7px 16px;
+  border-radius: 8px;
+  font-size: 12px;
+  font-weight: 600;
+  font-family: inherit;
+  cursor: pointer;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.35);
+  transition: background 0.15s, transform 0.1s;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+button.submit:hover { background: var(--accent-hover); }
+button.submit:active { transform: translateY(1px); }
+button.submit:disabled { opacity: 0.5; cursor: default; }
+
+/* ── 中断中の一覧 ── */
+
+.feed {
+  margin-top: 9px;
+  padding-top: 8px;
+  border-top: 1px solid var(--border);
+}
+.feed-head {
+  display: flex; align-items: center; justify-content: space-between;
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--text-mid);
+  letter-spacing: 0.3px;
+  margin-bottom: 4px;
+}
+
+.feed-expand {
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--text-dim);
+  font-family: inherit; font-size: 9px; font-weight: 500;
+  padding: 1px 7px; border-radius: 999px;
+  cursor: pointer;
+  transition: background 0.12s, color 0.12s;
+}
+.feed-expand:hover { background: rgba(255,255,255,0.10); color: var(--text); }
+
+/* ── 一覧を広げたとき ── */
+
+/* ふだんは畳んである。広げたときだけ入れ替わる。 */
+#wideArea { display: none; }
+body.wide #form-area { display: none; }
+body.wide #wideArea {
+  display: flex; flex-direction: column;
+  height: 100%;
+}
+
+.wide-head {
+  flex: none;
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 8px; margin-bottom: 8px;
+}
+
+.wide-tabs { display: flex; gap: 3px; min-width: 0; }
+
+/* 4 つ並ぶので詰める。文字は折らない（「期限切れ」が 2 行になると行が跳ねる）。 */
+.wide-tab {
+  border: 1px solid var(--input-border);
+  background: rgba(255,255,255,0.05);
+  color: var(--text-mid);
+  font-family: inherit; font-size: 10.5px;
+  height: 26px; padding: 0 9px;
+  border-radius: 13px; cursor: pointer;
+  white-space: nowrap; flex: none;
+  transition: background 0.12s, color 0.12s;
+}
+.wide-tab:hover { background: rgba(255,255,255,0.12); color: var(--text); }
+.wide-tab.on {
+  background: var(--accent); color: var(--accent-text); border-color: var(--accent);
+  font-weight: 600;
+}
+
+.wide-actions { display: flex; gap: 4px; }
+
+.wide-icon {
+  width: 26px; height: 26px;
+  display: flex; align-items: center; justify-content: center;
+  border: 1px solid var(--input-border);
+  background: transparent; color: var(--text-mid);
+  font-family: inherit; font-size: 13px; line-height: 1;
+  border-radius: 8px; cursor: pointer; padding: 0;
+  transition: background 0.12s, color 0.12s;
+}
+.wide-icon:hover { background: rgba(255,255,255,0.12); color: var(--text); }
+
+.wide-body {
+  flex: 1 1 auto; min-height: 0;
+  overflow-y: auto; overflow-x: hidden;
+  display: flex; flex-direction: column; gap: 1px;
+}
+.wide-body::-webkit-scrollbar { width: 6px; }
+.wide-body::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.14); border-radius: 3px; }
+
+.wide-foot {
+  flex: none;
+  font-size: 10px; color: var(--text-dim);
+  padding-top: 6px; margin-top: 4px;
+  border-top: 1px solid var(--border);
+}
+
+/* 1 件ぶん。左に丸、中身、右に期限とリスト名。 */
+.wide-row {
+  display: flex; align-items: flex-start; gap: 8px;
+  padding: 6px; border-radius: 8px;
+  cursor: pointer;
+  transition: background 0.12s;
+}
+.wide-row:hover { background: rgba(255,255,255,0.06); }
+
+.wide-main { flex: 1 1 auto; min-width: 0; }
+.wide-name {
+  font-size: 12px; color: var(--text);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.wide-sub {
+  font-size: 10px; color: var(--text-dim);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  margin-top: 2px;
+}
+
+.wide-side {
+  flex: none; text-align: right;
+  display: flex; flex-direction: column; align-items: flex-end; gap: 2px;
+  max-width: 38%;
+}
+.wide-due { font-size: 10px; color: var(--text-mid); white-space: nowrap; }
+/* 期限を過ぎているものは色を変える。数が多いと埋もれるため。 */
+.wide-due.over { color: var(--error); }
+.wide-due.today { color: #FBBF24; }
+.wide-status {
+  font-size: 9px; color: var(--text-dim);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  max-width: 100%;
+}
+/* メモ付き 3 件ぶん。窓の高さもこれに合わせて固定してある。 */
+.feed-body {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  max-height: 124px;
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+.feed-body::-webkit-scrollbar { width: 6px; }
+.feed-body::-webkit-scrollbar-thumb {
+  background: rgba(255,255,255,0.14);
+  border-radius: 3px;
+}
+
+.feed-note {
+  font-size: 11px;
+  color: var(--text-dim);
+  padding: 3px 2px;
+}
+
+.feed-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 6px;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: background 0.12s;
+}
+.feed-row:hover { background: rgba(255,255,255,0.06); }
+
+.feed-check {
+  flex: none;
+  width: 17px; height: 17px;
+  border-radius: 50%;
+  border: 1.5px solid var(--input-border);
+  background: transparent;
+  cursor: pointer;
+  padding: 0;
+  display: flex; align-items: center; justify-content: center;
+  transition: border-color 0.12s, background 0.12s;
+}
+.feed-check svg { width: 9px; height: 9px; stroke: var(--text); opacity: 0; }
+.feed-check:hover { border-color: var(--accent); background: rgba(255,255,255,0.14); }
+.feed-check:hover svg { opacity: 1; }
+.feed-check:disabled { opacity: 0.4; cursor: default; }
+
+.feed-text { min-width: 0; }        /* これがないと省略記号が出ない */
+.feed-name {
+  font-size: 12px;
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.feed-memo {
+  font-size: 10px;
+  color: var(--text-dim);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  margin-top: 1px;
+}
+
+.success-state {
+  display: none;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  gap: 8px;
+}
+.success-icon {
+  width: 40px; height: 40px;
+  background: rgba(255,255,255,0.10);
+  border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+}
+.success-icon svg { width: 20px; height: 20px; stroke: var(--text); }
+.success-text {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text);
+  text-align: center;
+  line-height: 1.55;
+  padding: 0 26px;
+}

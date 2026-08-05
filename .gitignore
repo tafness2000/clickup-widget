@@ -1,0 +1,42 @@
+# 同梱する実行環境。署名済みの Python / Qt / Git で 500MB を超えるので Git には入れない。
+# ビルドのときに build.py が用意する。
+/runtime/
+/mingit/
+
+# 出力物
+/dist/
+/build/
+__pycache__/
+*.pyc
+
+# ── 利用者ごとのデータ。絶対に入れないこと ──
+# config.json には ClickUp の接続情報が入る（このパソコンでしか読めない形だが、
+# それでも他人のリポジトリへ流す理由がない）。
+app/config.json
+app/config.json.*
+app/directory.json
+app/outbox.json
+app/outbox_failed.json
+app/*.log
+app/*.log.1
+
+# 更新のときにできるもの
+app/update-status.json
+app/update-log/
+app/backup/
+
+# 開発機で動かしたときに、ルート直下にできるもの（app/ へ移す前の名残）
+/config.json
+/config.json.*
+/directory.json
+/outbox.json
+/outbox_failed.json
+/*.log
+/*.log.1
+
+# 開発用。個人のパスが直に書いてある。
+/launch.bat
+/edge-profile/
+
+# レビュー用エージェントの覚書。過去にトークンが書き込まれた実績があるため外す。
+.claude/agent-memory/

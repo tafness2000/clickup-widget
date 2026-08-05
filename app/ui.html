@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8" />
+<title>Click Up Widget</title>
+<link rel="stylesheet" href="ui.css" />
+</head>
+<body>
+  <div id="pickerScrim"></div>
+
+  <div id="form-area">
+    <div class="field">
+      <label>タスク名</label>
+      <input class="task" id="taskInput" type="text" placeholder="どこで止めたか一言で…" autofocus />
+    </div>
+
+    <div class="field">
+      <label>メモ（任意）</label>
+      <textarea class="memo" id="memoInput" placeholder="次に再開するためのヒント"></textarea>
+    </div>
+
+    <div class="targets" id="targetsRow">
+      <button class="chip chip-list" id="chipList" type="button" title="登録先リスト（Ctrl+L）">
+        <span class="chip-ico">⌗</span><span class="chip-label" id="chipListLabel">—</span>
+      </button>
+      <button class="chip chip-user" id="chipUser" type="button" title="担当者（Ctrl+U）">
+        <span class="chip-ico">@</span><span class="chip-label" id="chipUserLabel">—</span>
+      </button>
+      <button class="chip chip-due" id="chipDue" type="button" title="期限（Ctrl+D）">
+        <span class="chip-ico">◷</span><span class="chip-label" id="chipDueLabel">今日</span>
+      </button>
+    </div>
+
+    <div class="footer">
+      <div class="hint" id="hintArea">
+        <kbd>Esc</kbd> 閉じる
+        <span style="color:var(--text-dim)">·</span>
+        <kbd>Ctrl+Enter</kbd> 登録
+      </div>
+      <div class="error" id="errMsg"></div>
+      <button class="submit" id="submitBtn">
+        <svg width="12" height="12" viewBox="0 0 13 13" fill="none">
+          <path d="M2 6.5H11M7 2.5L11 6.5L7 10.5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+        登録
+      </button>
+    </div>
+
+    <div class="feed">
+      <div class="feed-head">
+        <span id="feedTitle">最近登録したタスク</span>
+        <button class="feed-expand" id="expandBtn" type="button"
+                title="一覧を広げる（Ctrl+E）">広げる</button>
+      </div>
+      <div class="feed-body" id="feedBody">
+        <div class="feed-note">読み込み中…</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 一覧を広げたときだけ出る。入力欄は畳んで、こちらが窓いっぱいを使う。 -->
+  <div id="wideArea">
+    <div class="wide-head">
+      <div class="wide-tabs" id="wideTabs">
+        <button class="wide-tab"    type="button" data-scope="overdue">期限切れ</button>
+        <button class="wide-tab on" type="button" data-scope="today">今日</button>
+        <button class="wide-tab"    type="button" data-scope="week">今週</button>
+        <button class="wide-tab"    type="button" data-scope="all">すべて</button>
+      </div>
+      <div class="wide-actions">
+        <button class="wide-icon" id="wideSort" type="button"
+                title="いまは期限が遠い順。押すと近い順（期限切れが上）">↓</button>
+        <button class="wide-icon" id="wideReload" type="button" title="取り直す">⟳</button>
+        <button class="wide-icon" id="wideBack" type="button" title="入力へ戻る（Esc）">✕</button>
+      </div>
+    </div>
+    <div class="wide-body" id="wideBody">
+      <div class="feed-note">読み込み中…</div>
+    </div>
+    <div class="wide-foot" id="wideFoot"></div>
+  </div>
+
+  <div id="picker">
+    <input class="picker-search" id="pickerSearch" type="text"
+           autocomplete="off" spellcheck="false" placeholder="絞り込む…" />
+    <div class="picker-list" id="pickerList"></div>
+  </div>
+
+  <div class="success-state" id="successArea">
+    <div class="success-icon">
+      <svg viewBox="0 0 22 22" fill="none" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M4 11.5L9 16.5L18 7"/>
+      </svg>
+    </div>
+    <div class="success-text">登録しました</div>
+  </div>
+
+
+  <!-- 読む順に意味がある。ui.js が状態と要素を用意し、あとの 2 つがそれを使う。 -->
+  <script src="qrc:///qtwebchannel/qwebchannel.js"></script>
+  <script src="ui.js"></script>
+  <script src="picker.js"></script>
+  <script src="wide.js"></script>
+</body>
+</html>

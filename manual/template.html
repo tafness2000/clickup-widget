@@ -1,0 +1,670 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Click Up Widget 取扱説明書</title>
+<style>
+  :root {
+    --ink: #1f2328;
+    --ink-mid: #57606a;
+    --ink-dim: #848d97;
+    --line: #d8dee4;
+    --bg: #ffffff;
+    --panel: #f6f8fa;
+    --accent: #0969da;
+    --warn-bg: #fff8c5;
+    --warn-line: #d4a72c;
+    --stop-bg: #ffebe9;
+    --stop-line: #cf222e;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: "Segoe UI Variable", "Segoe UI", "Yu Gothic UI", system-ui, sans-serif;
+    color: var(--ink);
+    background: var(--bg);
+    line-height: 1.85;
+    font-size: 15px;
+  }
+
+  .wrap { max-width: 900px; margin: 0 auto; padding: 0 24px 96px; }
+
+  header {
+    border-bottom: 1px solid var(--line);
+    padding: 44px 0 28px;
+    margin-bottom: 8px;
+  }
+  header h1 { font-size: 30px; line-height: 1.3; letter-spacing: -0.01em; }
+  header .sub { color: var(--ink-mid); margin-top: 10px; font-size: 15px; }
+
+  nav {
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    padding: 14px 18px;
+    margin: 24px 0 40px;
+  }
+  nav strong { font-size: 13px; color: var(--ink-mid); display: block; margin-bottom: 6px; }
+  nav ol { margin-left: 20px; }
+  nav li { margin: 2px 0; }
+  nav a { color: var(--accent); text-decoration: none; }
+  nav a:hover { text-decoration: underline; }
+
+  h2 {
+    font-size: 22px;
+    margin: 52px 0 16px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid var(--line);
+    scroll-margin-top: 16px;
+  }
+  h3 { font-size: 17px; margin: 32px 0 10px; }
+
+  p { margin: 12px 0; }
+  ul, ol { margin: 12px 0 12px 24px; }
+  li { margin: 5px 0; }
+
+  /* ── 手順（左に番号、右に画像） ── */
+  .step {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    gap: 28px;
+    align-items: start;
+    margin: 28px 0;
+    padding-bottom: 28px;
+    border-bottom: 1px dashed var(--line);
+  }
+  .step:last-child { border-bottom: 0; }
+  .step-body h3 { margin-top: 0; display: flex; align-items: center; gap: 10px; }
+  .num {
+    flex: none;
+    width: 26px; height: 26px;
+    border-radius: 50%;
+    background: var(--ink);
+    color: #fff;
+    font-size: 14px; font-weight: 700;
+    display: inline-flex; align-items: center; justify-content: center;
+  }
+
+  figure { margin: 0; }
+  figure img {
+    display: block;
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    box-shadow: 0 6px 20px rgba(31, 35, 40, 0.12);
+    max-width: 100%;
+  }
+  figcaption {
+    font-size: 12px;
+    color: var(--ink-dim);
+    margin-top: 8px;
+    text-align: center;
+  }
+  .shots {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 22px;
+    margin: 22px 0;
+    align-items: flex-start;
+  }
+
+  kbd {
+    display: inline-block;
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-bottom-width: 2px;
+    border-radius: 5px;
+    padding: 1px 7px;
+    font-family: Consolas, "Cascadia Mono", monospace;
+    font-size: 13px;
+    white-space: nowrap;
+  }
+  code {
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 5px;
+    padding: 1px 6px;
+    font-family: Consolas, "Cascadia Mono", monospace;
+    font-size: 13px;
+  }
+
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 16px 0;
+    font-size: 14px;
+  }
+  th, td {
+    border: 1px solid var(--line);
+    padding: 9px 12px;
+    text-align: left;
+    vertical-align: top;
+  }
+  th { background: var(--panel); font-weight: 600; white-space: nowrap; }
+
+  .note, .warn, .stop {
+    border-radius: 10px;
+    padding: 14px 18px;
+    margin: 20px 0;
+    border: 1px solid var(--line);
+    background: var(--panel);
+  }
+  .warn { background: var(--warn-bg); border-color: var(--warn-line); }
+  .stop { background: var(--stop-bg); border-color: var(--stop-line); }
+  .note strong, .warn strong, .stop strong { display: block; margin-bottom: 4px; }
+
+  .tree {
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    padding: 16px 20px;
+    font-family: Consolas, "Cascadia Mono", monospace;
+    font-size: 13.5px;
+    line-height: 2;
+    white-space: pre;
+    overflow-x: auto;
+  }
+
+  footer {
+    margin-top: 64px;
+    padding-top: 20px;
+    border-top: 1px solid var(--line);
+    color: var(--ink-dim);
+    font-size: 13px;
+  }
+
+  @media (max-width: 780px) {
+    .step { grid-template-columns: 1fr; }
+    .wrap { padding: 0 16px 64px; }
+  }
+  @media print {
+    nav { display: none; }
+    .step { break-inside: avoid; }
+    figure img { box-shadow: none; }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header>
+  <h1>Click Up Widget 取扱説明書</h1>
+  <p class="sub">
+    作業を中断するとき、「どこで止めたか・次どこから再開するか」を
+    ClickUp にワンタッチで残せる常駐ツールです。
+  </p>
+</header>
+
+<nav>
+  <strong>目次</strong>
+  <ol>
+    <li><a href="#install">入れる・最初の設定</a></li>
+    <li><a href="#basic">使い方（登録する）</a></li>
+    <li><a href="#targets">登録先・担当者・期限を変える</a></li>
+    <li><a href="#fav">よく使うものを上に出す（★）</a></li>
+    <li><a href="#feed">最近登録したタスク</a></li>
+    <li><a href="#wide">一覧を広げて見る</a></li>
+    <li><a href="#offline">ネットにつながっていないとき</a></li>
+    <li><a href="#autostart">自動起動について</a></li>
+    <li><a href="#change">設定を変えたいとき</a></li>
+    <li><a href="#trouble">困ったとき</a></li>
+  </ol>
+</nav>
+
+<p>
+  キーボードの <kbd>Ctrl</kbd> + <kbd>Shift</kbd> + <kbd>Space</kbd> を押すと、画面の右下に
+  小さな入力ウィンドウが出ます。タスク名とメモを入れて <kbd>Ctrl</kbd> + <kbd>Enter</kbd> を押すだけで、
+  ClickUp にタスクが登録されます。
+</p>
+
+<div class="note">
+  <strong>動作要件</strong>
+  Windows 10 / 11 と、ClickUp のアカウント（無料プランで動きます）。
+  他に入れるものはありません。
+</div>
+
+<!-- ══════════════════════════════════════════ -->
+<h2 id="install">1. 入れる・最初の設定</h2>
+
+<p>画面の指示どおりに進めれば終わります。<strong>この説明書を読まなくても設定できます。</strong></p>
+
+<ol>
+  <li>配布された zip ファイルを解凍します</li>
+  <li>「ClickUpWidget」フォルダごと、好きな場所に移動してください（例: <code>C:\Tools\ClickUpWidget\</code>）</li>
+  <li>フォルダの中の <strong>「ClickUpWidget を起動」</strong> をダブルクリック（黒い画面が一瞬出ますが、そのままで大丈夫です）</li>
+</ol>
+
+<div class="warn">
+  <strong>先に置き場所を決めてください</strong>
+  あとからフォルダを移動すると、自動起動の設定が壊れます。
+</div>
+
+<div class="step">
+  <div class="step-body">
+    <h3><span class="num">1</span>ClickUp とつなぎます</h3>
+    <p>
+      「ClickUp の設定画面をひらく」を押すとブラウザが開きます。
+      そこで <strong>API Token</strong> の Generate（または Copy）を押し、
+      コピーされた文字を欄に貼り付けて「次へ」。
+    </p>
+    <p style="color:var(--ink-mid);font-size:14px">
+      API トークンは「あなた専用の鍵」です。他の人に教えないでください。
+    </p>
+  </div>
+  <figure>
+    <img src="{{IMG:setup-1}}" alt="初回設定 1: トークンの入力" width="430" />
+  </figure>
+</div>
+
+<div class="step">
+  <div class="step-body">
+    <h3><span class="num">2</span>デフォルトの登録先を決めます</h3>
+    <p>
+      <strong>「Personal Work space」にあるあなたのパーソナルリストが、最初から選ばれています。</strong>
+      そのまま「次へ」で構いません。
+    </p>
+    <p>
+      ここで決めるのは「ふだんの入れ先」です。<strong>ここにしか登録できなくなるわけではありません。</strong>
+      登録するときに、その 1 回だけ別のリストへ入れることもできます。
+    </p>
+    <p style="color:var(--ink-mid);font-size:14px">
+      あなたの名前のリストが見つからなかったときは、何も選ばれていない状態で出ます。
+      その場合は一覧から 1 つ選んでください（上の欄に名前を打つと絞れます）。
+    </p>
+  </div>
+  <figure>
+    <img src="{{IMG:setup-2}}" alt="初回設定 2: 登録先の選択" width="430" />
+  </figure>
+</div>
+
+<div class="step">
+  <div class="step-body">
+    <h3><span class="num">3</span>あと少しです</h3>
+    <p>
+      「パソコンを起動したら自動ではじめる」にチェックが入った状態で「はじめる」を押します。
+    </p>
+    <p style="color:var(--ink-mid);font-size:14px">
+      チェックを入れておくと、サインインするたびに裏で待機します（画面には出ません）。
+    </p>
+  </div>
+  <figure>
+    <img src="{{IMG:setup-3}}" alt="初回設定 3: 自動起動" width="430" />
+  </figure>
+</div>
+
+<div class="step">
+  <div class="step-body">
+    <h3><span class="num">4</span>準備ができました</h3>
+    <p>呼び出しキーが出たら完了です。「閉じる」を押してください。</p>
+    <p>以降は <kbd>Ctrl</kbd> + <kbd>Shift</kbd> + <kbd>Space</kbd> でいつでも呼び出せます。</p>
+  </div>
+  <figure>
+    <img src="{{IMG:setup-4}}" alt="初回設定 4: 完了" width="430" />
+  </figure>
+</div>
+
+<h3>フォルダの中身について</h3>
+<p>解凍すると次の 4 つが入っています。触るのは 1 つ目だけです。</p>
+<div class="tree">ClickUpWidget を起動  ← これをダブルクリック
+取扱説明書.html      ← このファイル
+app                  ← 本体と設定（config.json はこの中）
+runtime              ← 動かすのに必要な部品。触らないでください
+設定を解除するとき   ← 自動起動をやめたくなったときだけ開く</div>
+
+<div class="note">
+  <strong>トークンの保存について</strong>
+  貼り付けたトークンは、<strong>このパソコンのこのアカウントでしか読めない形</strong>に変換してから
+  <code>app\config.json</code> に保存されます。ファイルを開いても文字列は読めません。
+  <br />
+  このため、設定を済ませたフォルダを別のパソコンやアカウントへコピーしても、そのままでは使えません
+  （初回設定からやり直しになります）。人に渡すときは、配布された zip をそのまま渡してください。
+</div>
+
+<!-- ══════════════════════════════════════════ -->
+<h2 id="basic">2. 使い方（登録する）</h2>
+
+<div class="shots">
+  <figure>
+    <img src="{{IMG:main}}" alt="呼び出した直後" width="390" />
+    <figcaption>呼び出した直後</figcaption>
+  </figure>
+  <figure>
+    <img src="{{IMG:main-typed}}" alt="入力したところ" width="390" />
+    <figcaption>入力したところ</figcaption>
+  </figure>
+</div>
+
+<table>
+  <tr><th><kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>Space</kbd></th><td>ウィンドウを呼び出す</td></tr>
+  <tr><th><kbd>Ctrl</kbd>+<kbd>Enter</kbd></th><td>登録して閉じる</td></tr>
+  <tr><th><kbd>Esc</kbd></th><td>登録せず閉じる</td></tr>
+</table>
+
+<ul>
+  <li><strong>タスク名</strong> … 「どこで止めたか」を一言で</li>
+  <li><strong>メモ</strong> … 「次どこから再開するか」のヒント（任意）</li>
+</ul>
+
+<p>
+  打った名前がそのままタスク名になります。日付は<strong>期限</strong>として持たせるので、
+  名前に入れる必要はありません（<a href="#targets">3. 登録先・担当者・期限を変える</a>）。
+</p>
+
+<h3>メモ欄の下書き</h3>
+<p>
+  呼び出した時点で<strong>前に開いていたウィンドウの名前</strong>が、メモ欄にあらかじめ入ります
+  （上の画像では「見積書_呉服橋.xlsx - Excel」）。そのまま登録しても、消して書き直しても構いません。
+</p>
+<p style="color:var(--ink-mid);font-size:14px">
+  出したまま別の作業をして、もう一度 <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>Space</kbd> で戻したときは、
+  そのときの作業先に入れ替わります。ただしタスク名を打ちかけていたり、メモを自分で書き直していた場合は
+  そのまま残ります。
+</p>
+
+<!-- ══════════════════════════════════════════ -->
+<h2 id="targets">3. 登録先・担当者・期限を変える</h2>
+
+<p>メモ欄の下に、いまの登録先が 3 つ並んでいます。押すと選択パネルが出ます。</p>
+
+<table>
+  <tr><th>⌗ リスト</th><td>登録先のリスト（クリック または <kbd>Ctrl</kbd>+<kbd>L</kbd>）</td></tr>
+  <tr><th>@ 担当者</th><td>担当者（クリック または <kbd>Ctrl</kbd>+<kbd>U</kbd>）</td></tr>
+  <tr><th>◷ 期限</th><td>期限（クリック または <kbd>Ctrl</kbd>+<kbd>D</kbd>）</td></tr>
+</table>
+
+<div class="shots">
+  <figure>
+    <img src="{{IMG:pick-list}}" alt="リストを選ぶ" width="390" />
+    <figcaption>リストを選ぶ（<kbd>Ctrl</kbd>+<kbd>L</kbd>）</figcaption>
+  </figure>
+  <figure>
+    <img src="{{IMG:pick-list-search}}" alt="名前で絞り込む" width="390" />
+    <figcaption>打つと絞られる</figcaption>
+  </figure>
+</div>
+
+<ul>
+  <li>上下キーで選んで <kbd>Enter</kbd>、またはクリックで決まります</li>
+  <li>リストは名前だけでなく、<strong>入っているフォルダ名でも探せます</strong><br />
+      例：「grand kyoto」で 2 件出たら、「hotel archive kyoto」で絞れます</li>
+  <li>担当者は名前でもメールアドレスでも探せます</li>
+  <li>リスト名も担当者名もアルファベットなので、パネルを開くと<strong>入力モードが自動で半角英数に切り替わります</strong></li>
+  <li>やめるときは、パネルの外（上のあいたところ）をクリックするか <kbd>Esc</kbd></li>
+</ul>
+
+<div class="shots">
+  <figure>
+    <img src="{{IMG:pick-user}}" alt="担当者を選ぶ" width="390" />
+    <figcaption>担当者（<kbd>Ctrl</kbd>+<kbd>U</kbd>）</figcaption>
+  </figure>
+  <figure>
+    <img src="{{IMG:pick-due}}" alt="期限を選ぶ" width="390" />
+    <figcaption>期限（<kbd>Ctrl</kbd>+<kbd>D</kbd>）</figcaption>
+  </figure>
+</div>
+
+<h3>期限は 6 つから選べます</h3>
+<p>始まりの日は中断した日のままで、期限だけが動きます。</p>
+<table>
+  <tr><th>今日</th><td>その日じゅう（はじめはこれ）</td></tr>
+  <tr><th>明日</th><td>翌日まで</td></tr>
+  <tr><th>3日以内</th><td>3 日後まで</td></tr>
+  <tr><th>今週中</th><td>直近の金曜日まで（土日に選ぶと翌週の金曜）</td></tr>
+  <tr><th>1週間</th><td>7 日後まで</td></tr>
+  <tr><th>期限なし</th><td>期限を付けない</td></tr>
+</table>
+
+<div class="step">
+  <div class="step-body">
+    <h3>変えた場所は白く反転します</h3>
+    <p>
+      「いつもと違うところに入れようとしている」と気づけるようにするためです。
+    </p>
+    <p>
+      <strong>変えた内容はその 1 回かぎりです。</strong>
+      次に呼び出したときは、いつものリスト・自分・今日に戻ります。
+    </p>
+  </div>
+  <figure>
+    <img src="{{IMG:chips-changed}}" alt="既定から変えた状態" width="390" />
+  </figure>
+</div>
+
+<!-- ══════════════════════════════════════════ -->
+<h2 id="fav">4. よく使うものを上に出す（★）</h2>
+
+<p>
+  リストや担当者のパネルで<strong>行にマウスを乗せると、右端に ☆ が出ます。</strong>
+  押すと ★ になり、次からその候補が上のほうに出るようになります。
+</p>
+
+<table>
+  <tr><th>何も打っていないとき</th><td>★ → 最近使った → いつものリスト → 残り の順</td></tr>
+  <tr><th>文字を打ったとき</th><td>同じくらい当てはまるものの中で ★ が先</td></tr>
+  <tr><th>外したいとき</th><td>もう一度 ★ を押す</td></tr>
+</table>
+
+<div class="note">
+  <strong>同じ名前のリストがあるとき</strong>
+  上の画像のように <code>Grand Hotel Kyoto</code> が 2 つある場合、自分が使う方に ★ を付けておくと、
+  毎回フォルダ名で見分けずに済みます。
+</div>
+
+<!-- ══════════════════════════════════════════ -->
+<h2 id="feed">5. 最近登録したタスク</h2>
+
+<p>
+  入力欄の下に、まだ終わっていないものが<strong>登録の新しい順に最大 5 件</strong>出ます
+  （3 件ぶんが見えていて、残りはスクロールすると出てきます）。
+</p>
+<p>
+  いつものリストの分だけでなく、<strong>リストを跨いで集めます。</strong>
+  その場で別のリストへ入れた分もここに出るので、どこへ入れたか忘れても見失いません。
+  いつものリスト以外のものは、2 行目にリスト名が付きます。
+</p>
+
+<table>
+  <tr><th>行をクリック</th><td>ClickUp でそのタスクを開く</td></tr>
+  <tr><th>左の丸をクリック</th><td>その場で完了にする</td></tr>
+</table>
+
+<div class="note">
+  丸を押したときは、<strong>ClickUp 側が実際に変わったことを確かめてから</strong>行を消します。
+  変わらなかったときは行が残り、理由が出ます（消えたのに ClickUp 側はそのまま、という状態を作らないためです）。
+</div>
+
+<!-- ══════════════════════════════════════════ -->
+<h2 id="wide">6. 一覧を広げて見る</h2>
+
+<p>
+  「最近登録したタスク」の右にある <strong>「広げる」</strong>（または <kbd>Ctrl</kbd>+<kbd>E</kbd>）を押すと、
+  ウィンドウが縦に伸びて一覧だけの画面になります。入力欄はいったん畳まれます。
+</p>
+
+<div class="shots">
+  <figure>
+    <img src="{{IMG:wide-today}}" alt="広げた一覧（今日）" width="330" />
+    <figcaption>「今日」タブ</figcaption>
+  </figure>
+  <figure>
+    <img src="{{IMG:wide-all}}" alt="広げた一覧（すべて）" width="330" />
+    <figcaption>「すべて」タブ</figcaption>
+  </figure>
+  <figure>
+    <img src="{{IMG:wide-overdue}}" alt="広げた一覧（期限切れ）" width="330" />
+    <figcaption>「期限切れ」タブ</figcaption>
+  </figure>
+</div>
+
+<table>
+  <tr><th>期限切れ</th><td>きのう以前が期限のもの</td></tr>
+  <tr><th>今日</th><td>きょうが期限のもの</td></tr>
+  <tr><th>今週</th><td>きょうから今週の金曜まで</td></tr>
+  <tr><th>すべて</th><td>期限で絞らない（期限なしのものもここだけに出ます）</td></tr>
+</table>
+
+<table>
+  <tr><th>↓ ↑</th><td>期限の並び順を入れ替える（はじめは期限が遠い順）</td></tr>
+  <tr><th>⟳</th><td>取り直す</td></tr>
+  <tr><th>✕</th><td>入力画面へ戻る（<kbd>Esc</kbd> でも戻れます）</td></tr>
+</table>
+
+<p>
+  期限が過ぎたものは<span style="color:#cf222e">赤</span>、今日のものは
+  <span style="color:#9a6700">黄色</span>で出ます。
+  ここに出るのは「自分が担当で、まだ終わっていないもの」で、ワークスペース全体から集めます。
+</p>
+
+<h3>出さないもの</h3>
+<p>一覧が工程管理のタスクで埋まらないよう、次のものは外しています。</p>
+<ul>
+  <li>「本工事」「Mockup」「Maintenance」「施工中」のように、<strong>工程を表すステータスへ移っているタスク</strong><br />
+      （中断メモは作られたときのまま「to do」に居るので、そこで見分けます）</li>
+  <li><code>config.json</code> の <code>"excluded_lists"</code> に書いたリストのぶん</li>
+</ul>
+<p>特定のリストをまるごと出したくないときは、<code>app\config.json</code> にリスト ID を書き足してください。</p>
+<div class="tree">"excluded_lists": ["900700321909"]</div>
+<p style="color:var(--ink-mid);font-size:14px">
+  リスト ID は、ClickUp でそのリストを開いたときの URL の末尾の数字です。
+</p>
+
+<!-- ══════════════════════════════════════════ -->
+<h2 id="offline">7. ネットにつながっていないとき</h2>
+
+<p>
+  登録は失敗せず、いったん手元に保存されます。
+  <strong>「接続できないため保存しました」</strong>と出たら、その内容は預かった状態です。
+  つながり次第（5 分ごとに確認します）自動で ClickUp に登録されます。
+</p>
+<p>
+  このとき日付は中断した日のままなので、後から登録されても日付はずれません。
+</p>
+<p style="color:var(--ink-mid);font-size:14px">
+  預かった分の登録先リストが後から消されたなど、何度送っても通らないものは、
+  <code>app\outbox_failed.json</code> へ理由と一緒に移します。捨てはしません。
+  こうしておかないと、その 1 件が先頭で詰まって後ろの分まで登録されなくなります。
+</p>
+
+<!-- ══════════════════════════════════════════ -->
+<h2 id="autostart">8. 自動起動について</h2>
+
+<p>初回設定の③でチェックを入れていれば、もう設定は済んでいます。次のふたつが有効になっています。</p>
+<table>
+  <tr><th>自動起動</th><td>Windows にサインインすると裏で待機します（画面には出ません）</td></tr>
+  <tr><th>見張り役</th><td>5 分ごとに常駐の生死を確認し、落ちていれば起動し直します</td></tr>
+</table>
+
+<h3>やめたいとき</h3>
+<p>フォルダの中の「設定を解除するとき」を開き、次のどちらかをダブルクリックしてください。</p>
+<ul>
+  <li><code>自動起動を解除する.bat</code> … サインイン時の自動起動をやめる</li>
+  <li><code>ウォッチドッグを解除する.bat</code> … 見張り役をやめる</li>
+</ul>
+
+<!-- ══════════════════════════════════════════ -->
+<h2 id="change">9. 設定を変えたいとき</h2>
+
+<p>デフォルトの登録先ごと変えたいときは、初回設定をやり直すのが確実です。</p>
+<ol>
+  <li>アプリを終了（タスクマネージャーで <code>pythonw.exe</code> を終了）</li>
+  <li><code>app</code> フォルダの中の <code>config.json</code> を削除</li>
+  <li>「ClickUpWidget を起動」をダブルクリック → 設定画面が最初から出ます</li>
+</ol>
+<p style="color:var(--ink-mid);font-size:14px">
+  1 回だけ別のリストに入れたいときは、削除する必要はありません。入力画面の ⌗ を押してその場で選べます。
+</p>
+
+<h3>いつもの期限を「今日」以外にしたい</h3>
+<p><code>app\config.json</code> に次の行を足すと、それが既定になります。</p>
+<div class="tree">"default_due_preset": "week"</div>
+<p>
+  使えるのは <code>today</code> / <code>tomorrow</code> / <code>d3</code> /
+  <code>week</code> / <code>d7</code> / <code>none</code> です。
+</p>
+
+<!-- ══════════════════════════════════════════ -->
+<h2 id="trouble">10. 困ったとき</h2>
+
+<h3><kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>Space</kbd> を押しても何も起きない</h3>
+<p>
+  アプリが起動していない可能性があります。「ClickUpWidget を起動」をダブルクリックしてください。
+  起動しても画面には出ません（裏で待機するだけです）。押せば出てきます。
+</p>
+<p><code>app\pausetask.log</code> を開くと原因が分かります。</p>
+<table>
+  <tr>
+    <th>「起動しました（ホットキー … 登録済み）」が最後の行</th>
+    <td>常駐は生きています。念のため常駐を再起動してみてください。</td>
+  </tr>
+  <tr>
+    <th>「ホットキーの登録に失敗しました」がある</th>
+    <td>他のアプリが <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>Space</kbd> を先に押さえています。
+        そのアプリを終了してから常駐を再起動してください。</td>
+  </tr>
+  <tr>
+    <th>「FATAL」で始まる行がある</th>
+    <td>異常終了しています。その内容を控えてください。</td>
+  </tr>
+  <tr>
+    <th>何も記録がない／古い日時で止まっている</th>
+    <td>常駐が落ちたままです。自動起動にチェックを入れていれば、5 分以内に見張り役が起動し直します。</td>
+  </tr>
+</table>
+
+<h3>ウィンドウが枠だけになって、中身が表示されない</h3>
+<ol>
+  <li><kbd>Esc</kbd> で閉じて、もう一度 <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>Space</kbd> で開き直す</li>
+  <li>直らなければ常駐を終了して起動し直す（タスクマネージャーで <code>pythonw.exe</code> を終了 →
+      「ClickUpWidget を起動」をもう一度ダブルクリック）</li>
+</ol>
+<div class="warn">
+  この症状では見張り役は反応しません。プロセス自体は生きているため、正常に見えます。
+</div>
+
+<h3>一覧の丸を押しても、行が消えず理由が出る</h3>
+<p>
+  完了のステータスを送ったのに、ClickUp 側が変わらなかった状態です。
+  そのタスクに他の人が同時に触っていたか、リストの権限が変わった可能性があります。
+  出ている理由を控えて、ClickUp でそのタスクを直接開いてみてください。
+</p>
+
+<h3>「ClickUp エラー: 401」が出る</h3>
+<p>
+  API トークンが無効になっています。ClickUp の Settings → Apps でトークンを再生成してから、
+  <code>app\config.json</code> を削除して起動し直してください（設定画面が最初から出ます）。
+</p>
+
+<h3>「ClickUp エラー: 404」が出る</h3>
+<p>
+  登録先のリストが削除されているか、権限が外れています。
+  <code>app\config.json</code> を削除して起動し直し、リストを選び直してください。
+</p>
+
+<h3>リストや担当者の候補が出てこない／古い</h3>
+<p>
+  候補は起動したときにまとめて取ってきて <code>app\directory.json</code> に控えています。
+  1 日経つと自動で取り直します。すぐ反映したいときは常駐を再起動してください
+  （新しく作ったリストや、入ったばかりのメンバーが出ないときはこれです）。
+</p>
+
+<h3>設定を済ませたフォルダを別のパソコンにコピーしたら、初回設定に戻った</h3>
+<p>
+  仕様です。API トークンはコピー元のパソコンでしか読めない形で保存されています。
+  移した先で初回設定をやり直してください（トークンは同じもので構いません）。
+</p>
+
+<h3>設定をゼロからやり直したい</h3>
+<p>
+  <code>app\config.json</code> を削除して起動し直すと初回設定画面が出ます。
+  同じ場所の <code>directory.json</code> も一緒に消しておくと、候補も取り直します。
+</p>
+
+<footer>
+  <p>ご不明な点はこちらまで：（配布者が記入）</p>
+  <p>この説明書の画面は実際のアプリを撮ったものです。名前・リスト名はすべて説明用の架空のものです。</p>
+</footer>
+
+</div>
+</body>
+</html>

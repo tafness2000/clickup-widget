@@ -1,0 +1,530 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8" />
+<title>Click Up Widget – 初回設定</title>
+<style>
+  /* 外部のフォントは読まない（業務用のパソコンから外へ通信を出さないため）。 */
+  :root {
+    --backdrop: none;
+    --solid: #141416;
+    --glass: rgba(14, 14, 16, 0.62);
+    --border: rgba(255, 255, 255, 0.12);
+    --text: #F5F5F4;
+    --text-mid: #B5AFAA;
+    --text-dim: #8A857F;
+    --input-bg: rgba(255, 255, 255, 0.06);
+    --input-border: rgba(255, 255, 255, 0.14);
+    --input-focus: rgba(255, 255, 255, 0.45);
+    --accent: #F5F5F4;
+    --accent-hover: #E0DEDB;
+    --accent-text: #18181B;
+    --error: #F87171;
+    --ok: #86EFAC;
+    --radius-sm: 10px;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  html, body {
+    width: 100%; height: 100%;
+    font-family: "Segoe UI Variable", "Segoe UI", "Yu Gothic UI", system-ui, sans-serif;
+    color: var(--text);
+    -webkit-font-smoothing: antialiased;
+    overflow: hidden;
+  }
+  html { background: var(--solid); }
+
+  body {
+    background: transparent;
+    padding: 16px 18px 14px;
+    display: flex; flex-direction: column;
+  }
+
+  body::before {
+    content: '';
+    position: fixed; inset: -40px;
+    background: var(--backdrop) center / cover no-repeat;
+    filter: blur(14px) saturate(1.6) brightness(0.42);
+    z-index: -2;
+  }
+  body::after {
+    content: '';
+    position: fixed; inset: 0;
+    background:
+      linear-gradient(180deg, rgba(255,255,255,0.06) 0%, rgba(255,255,255,0) 45%),
+      var(--glass);
+    z-index: -1;
+  }
+
+  /* ── 進み具合 ── */
+
+  .steps {
+    display: flex; align-items: center; gap: 6px;
+    margin-bottom: 14px;
+  }
+  .steps .dot {
+    flex: 1 1 0; height: 3px; border-radius: 2px;
+    background: rgba(255,255,255,0.13);
+    transition: background 0.2s;
+  }
+  .steps .dot.done { background: var(--accent); }
+
+  .title {
+    font-size: 16px; font-weight: 600;
+    letter-spacing: 0.2px;
+    margin-bottom: 6px;
+  }
+  .lead {
+    font-size: 11.5px; line-height: 1.6;
+    color: var(--text-mid);
+    margin-bottom: 12px;
+  }
+
+  .page { display: none; flex: 1 1 auto; min-height: 0; flex-direction: column; }
+  .page.on { display: flex; }
+
+  /* ── 手順 ── */
+
+  .howto {
+    background: rgba(255,255,255,0.05);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    padding: 10px 12px;
+    margin-bottom: 12px;
+  }
+  .howto ol { margin: 0; padding-left: 17px; }
+  .howto li {
+    font-size: 11.5px; line-height: 1.75;
+    color: var(--text-mid);
+  }
+  .howto li b { color: var(--text); font-weight: 600; }
+
+  /* ── 部品 ── */
+
+  input.text {
+    width: 100%; height: 36px;
+    background: var(--input-bg);
+    border: 1.5px solid var(--input-border);
+    border-radius: var(--radius-sm);
+    padding: 0 12px;
+    color: var(--text);
+    font-family: inherit; font-size: 12px;
+    outline: none;
+    transition: border-color 0.15s, box-shadow 0.15s;
+  }
+  input.text::placeholder { color: var(--text-dim); }
+  input.text:focus { border-color: var(--input-focus); box-shadow: 0 0 0 3px rgba(255,255,255,0.08); }
+
+  button.primary {
+    background: var(--accent); color: var(--accent-text);
+    border: none; border-radius: 9px;
+    padding: 9px 20px;
+    font-size: 12.5px; font-weight: 600; font-family: inherit;
+    cursor: pointer;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.35);
+    transition: background 0.15s, transform 0.1s;
+  }
+  button.primary:hover { background: var(--accent-hover); }
+  button.primary:active { transform: translateY(1px); }
+  button.primary:disabled { opacity: 0.45; cursor: default; }
+
+  button.ghost {
+    background: rgba(255,255,255,0.07);
+    color: var(--text);
+    border: 1px solid var(--input-border);
+    border-radius: 9px;
+    padding: 9px 14px;
+    font-size: 12px; font-weight: 500; font-family: inherit;
+    cursor: pointer;
+    display: flex; align-items: center; gap: 7px;
+    transition: background 0.12s;
+  }
+  button.ghost:hover { background: rgba(255,255,255,0.14); }
+  button.ghost svg { width: 13px; height: 13px; stroke: var(--text-mid); }
+
+  .wide { width: 100%; justify-content: center; margin-bottom: 12px; }
+
+  .msg { font-size: 11px; line-height: 1.5; margin-top: 8px; min-height: 15px; }
+  .msg.err { color: var(--error); }
+  .msg.ok  { color: var(--ok); }
+
+  /* ボタンは常に下端へ。手順の長さで位置が変わると、押す場所を探すことになるため。 */
+  .footer {
+    display: flex; align-items: center; justify-content: space-between;
+    gap: 10px; margin-top: auto; padding-top: 12px;
+  }
+  .footer .note { font-size: 10.5px; color: var(--text-dim); }
+
+  /* ── リスト選び ── */
+
+  .picker { flex: 1 1 auto; display: flex; flex-direction: column; min-height: 0; }
+  .picker-list {
+    flex: 1 1 auto; min-height: 0;
+    margin-top: 8px;
+    overflow-y: auto; overflow-x: hidden;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    padding: 4px;
+  }
+  .picker-list::-webkit-scrollbar { width: 6px; }
+  .picker-list::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.14); border-radius: 3px; }
+
+  .pick-row {
+    padding: 5px 8px; border-radius: 7px; cursor: pointer; min-width: 0;
+  }
+  .pick-row:hover { background: rgba(255,255,255,0.07); }
+  .pick-row.active { background: rgba(255,255,255,0.15); }
+  .pick-name {
+    font-size: 12px; color: var(--text);
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  .pick-path {
+    font-size: 9.5px; color: var(--text-dim);
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    margin-top: 1px;
+  }
+  .pick-note { font-size: 11px; color: var(--text-dim); padding: 8px; }
+
+  /* ── 仕上げ ── */
+
+  .check {
+    display: flex; align-items: flex-start; gap: 9px;
+    background: rgba(255,255,255,0.05);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    padding: 11px 12px;
+    cursor: pointer;
+  }
+  .check input { margin-top: 2px; width: 15px; height: 15px; accent-color: #FFF; cursor: pointer; }
+  .check .body { flex: 1 1 auto; }
+  .check .body .head { font-size: 12px; font-weight: 600; }
+  .check .body .sub { font-size: 10.5px; color: var(--text-dim); margin-top: 3px; line-height: 1.5; }
+
+  .done-mark {
+    width: 46px; height: 46px; border-radius: 50%;
+    background: rgba(255,255,255,0.10);
+    display: flex; align-items: center; justify-content: center;
+    margin: 6px auto 12px;
+  }
+  .done-mark svg { width: 24px; height: 24px; stroke: var(--text); }
+
+  .keys {
+    text-align: center;
+    background: rgba(255,255,255,0.05);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    padding: 14px 12px;
+  }
+  .keys kbd {
+    display: inline-block;
+    background: rgba(255,255,255,0.12);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 4px 9px;
+    font-family: inherit; font-size: 13px; font-weight: 600;
+    margin: 0 2px;
+  }
+  .keys .cap { font-size: 11px; color: var(--text-mid); margin-top: 9px; line-height: 1.6; }
+</style>
+</head>
+<body>
+  <div class="steps">
+    <div class="dot done" id="dot1"></div>
+    <div class="dot" id="dot2"></div>
+    <div class="dot" id="dot3"></div>
+    <div class="dot" id="dot4"></div>
+  </div>
+
+  <!-- 1. トークン -->
+  <div class="page on" id="page1">
+    <div class="title">ClickUp とつなぎます</div>
+    <div class="lead">下のボタンで ClickUp の設定画面が開きます。手順どおりに進めてください。</div>
+
+    <button class="ghost wide" id="openBtn">
+      <svg viewBox="0 0 16 16" fill="none" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M9 2h5v5M14 2L7 9M12 9.5V13a1 1 0 01-1 1H3a1 1 0 01-1-1V5a1 1 0 011-1h3.5"/>
+      </svg>
+      ClickUp の設定画面をひらく
+    </button>
+
+    <div class="howto">
+      <ol>
+        <li>ひらいた画面で <b>API Token</b> をさがす</li>
+        <li><b>Generate</b>（または <b>Copy</b>）を押す</li>
+        <li>コピーされた文字を、下の欄に貼り付ける</li>
+      </ol>
+    </div>
+
+    <input class="text" id="tokenInput" type="password"
+           placeholder="ここに貼り付け（Ctrl + V）" autofocus />
+    <div class="msg" id="msg1"></div>
+
+    <div class="footer">
+      <div class="note">貼り付けた内容はこのパソコンの中だけに保存されます</div>
+      <button class="primary" id="next1">次へ</button>
+    </div>
+  </div>
+
+  <!-- 2. リスト -->
+  <div class="page" id="page2">
+    <div class="title">デフォルトの登録先を決めます</div>
+    <!-- 誰としてつながったかは常に見えるところに置く。
+         別のアカウントのトークンを貼ってしまったとき、ここで気づけるようにするため。 -->
+    <div class="note" id="who2"></div>
+    <div class="lead" id="lead2">
+      中断メモをいつも入れておくリストです。別のリストへ入れることもできます。
+    </div>
+
+    <div class="picker">
+      <input class="text" id="searchInput" type="text" placeholder="リスト名で絞り込む" />
+      <div class="picker-list" id="listArea">
+        <div class="pick-note">リストを読み込んでいます…</div>
+      </div>
+    </div>
+    <div class="msg" id="msg2"></div>
+
+    <div class="footer">
+      <div class="note" id="picked2">選んでいません</div>
+      <button class="primary" id="next2" disabled>次へ</button>
+    </div>
+  </div>
+
+  <!-- 3. 自動起動 -->
+  <div class="page" id="page3">
+    <div class="title">あと少しです</div>
+    <div class="lead">パソコンを起動したときに、自動で待機させておくことをおすすめします。</div>
+
+    <label class="check" for="autoChk">
+      <input type="checkbox" id="autoChk" checked />
+      <div class="body">
+        <div class="head">パソコンを起動したら自動ではじめる</div>
+        <div class="sub">
+          サインインすると裏で待機します。画面には出ません。<br />
+          万一止まっても自動で立ち上げ直します。
+        </div>
+      </div>
+    </label>
+
+    <div class="msg" id="msg3"></div>
+
+    <div class="footer">
+      <div class="note"></div>
+      <button class="primary" id="next3">はじめる</button>
+    </div>
+  </div>
+
+  <!-- 4. 完了 -->
+  <div class="page" id="page4">
+    <div class="done-mark">
+      <svg viewBox="0 0 24 24" fill="none" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M4 12.5L9.5 18L20 6"/>
+      </svg>
+    </div>
+    <div class="title" style="text-align:center">準備ができました</div>
+    <div class="lead" style="text-align:center">呼び出し方はこれだけです。</div>
+
+    <div class="keys">
+      <div>
+        <kbd>Ctrl</kbd> + <kbd>Shift</kbd> + <kbd>Space</kbd>
+      </div>
+      <div class="cap" id="doneNote">
+        いつでもこのキーで入力画面が出ます。<br />
+        書いたら <b>Ctrl + Enter</b> で登録、<b>Esc</b> で閉じます。
+      </div>
+    </div>
+
+    <div class="footer">
+      <div class="note"></div>
+      <button class="primary" id="next4">閉じる</button>
+    </div>
+  </div>
+
+  <script src="qrc:///qtwebchannel/qwebchannel.js"></script>
+  <script>
+    const $ = id => document.getElementById(id);
+
+    let bridge = null;
+    new QWebChannel(qt.webChannelTransport, ch => { bridge = ch.objects.bridge; });
+
+    function setBackdrop(uri) {
+      document.documentElement.style.setProperty('--backdrop', 'url("' + uri + '")');
+    }
+
+    let token = '';
+    let connectedName = '';      // 誰としてつながったか。案内文を書き換えても消さない
+    let lists = [];
+    let shown = [];
+    let picked = null;
+
+    function goto(step) {
+      for (let i = 1; i <= 4; i++) {
+        $('page' + i).classList.toggle('on', i === step);
+        $('dot' + i).classList.toggle('done', i <= step);
+      }
+    }
+
+    function say(id, text, kind) {
+      const el = $(id);
+      el.textContent = text;
+      el.className = 'msg' + (text ? ' ' + (kind || 'err') : '');
+    }
+
+    // ── 1. トークン ───────────────────────────────────────────
+
+    $('openBtn').addEventListener('click', () => { if (bridge) bridge.openTokenPage(); });
+
+    function submitToken() {
+      const value = $('tokenInput').value.trim();
+      if (!value) { say('msg1', 'コピーした文字を貼り付けてください'); $('tokenInput').focus(); return; }
+      if (!bridge) { say('msg1', '準備中です。少し待ってからお試しください'); return; }
+      say('msg1', '確認しています…', 'ok');
+      $('next1').disabled = true;
+      bridge.checkToken(value, raw => {
+        const res = JSON.parse(raw);
+        $('next1').disabled = false;
+        if (!res.ok) { say('msg1', res.error); $('tokenInput').focus(); return; }
+        token = value;
+        connectedName = res.name;
+        say('msg1', '');
+        $('who2').textContent = res.name + ' さんとしてつながりました';
+        $('lead2').textContent =
+          'デフォルトの登録先にするリストを 1 つ選んでください。別のリストへ入れることもできます。';
+        goto(2);
+        bridge.loadLists(token, res.name);
+        setTimeout(() => $('searchInput').focus(), 50);
+      });
+    }
+
+    $('next1').addEventListener('click', submitToken);
+    $('tokenInput').addEventListener('keydown', e => {
+      if (e.key === 'Enter' && !e.isComposing) submitToken();
+    });
+
+    // ── 2. リスト ─────────────────────────────────────────────
+
+    // pause.pyw が裏で取ってきた一覧を流し込む。
+    function setupLists(data) {
+      if (!data.ok || !data.lists.length) {
+        $('listArea').replaceChildren();
+        const note = document.createElement('div');
+        note.className = 'pick-note';
+        note.textContent = 'リストを読み込めませんでした。ネットワークを確認して、'
+                         + 'いったん閉じてから開き直してください。';
+        $('listArea').appendChild(note);
+        return;
+      }
+      lists = data.lists;
+      // 名前から置き場所の見当が付いていれば、選んだ状態で出す。
+      // 200 件の中から「どれが自分のものか」を探させないため。
+      if (data.suggested) {
+        pick(data.suggested);
+        $('lead2').textContent =
+          'パーソナルリストを選択してあります。これでよければ「次へ」を押してください。'
+          + 'ここで決めるのは“デフォルトの登録先”です。別のリストへ入れることもできます。';
+        return;
+      }
+      render('');
+    }
+
+    function render(query) {
+      const tokens = (query || '').toLowerCase().split(/[\s　]+/).filter(Boolean);
+      shown = lists.filter(item => {
+        const hay = (item.name + ' ' + (item.path || '')).toLowerCase();
+        return tokens.every(t => hay.includes(t));
+      }).slice(0, 200);
+
+      // 選んであるものは先頭に。何も打っていないとき、下の方に埋もれて見えなくなる。
+      if (picked) {
+        const self = shown.find(item => item.id === picked.id);
+        if (self) shown = [self, ...shown.filter(item => item.id !== picked.id)];
+      }
+
+      const area = $('listArea');
+      area.replaceChildren();
+      if (!shown.length) {
+        const note = document.createElement('div');
+        note.className = 'pick-note';
+        note.textContent = '見つかりません';
+        area.appendChild(note);
+        return;
+      }
+      shown.forEach(item => {
+        const row = document.createElement('div');
+        row.className = 'pick-row' + (picked && picked.id === item.id ? ' active' : '');
+
+        const name = document.createElement('div');
+        name.className = 'pick-name';
+        name.textContent = item.name;
+        row.appendChild(name);
+
+        if (item.path) {
+          const path = document.createElement('div');
+          path.className = 'pick-path';
+          path.textContent = item.path;
+          row.appendChild(path);
+        }
+        row.addEventListener('click', () => pick(item));
+        area.appendChild(row);
+      });
+    }
+
+    function pick(item) {
+      picked = item;
+      // 同じ名前のリストが別の場所にもあるので、どこのものかまで出す。
+      $('picked2').textContent =
+        '選択中： ' + item.name + (item.path ? '（' + item.path + '）' : '');
+      $('next2').disabled = false;
+      render($('searchInput').value);
+    }
+
+    $('searchInput').addEventListener('input', () => render($('searchInput').value));
+    $('next2').addEventListener('click', () => { if (picked) goto(3); });
+
+    // ── 3. 自動起動 ───────────────────────────────────────────
+
+    $('next3').addEventListener('click', () => {
+      if (!bridge || !picked) return;
+      $('next3').disabled = true;
+      say('msg3', '設定しています…', 'ok');
+      bridge.finishSetup(token, String(picked.id), $('autoChk').checked, raw => {
+        const res = JSON.parse(raw);
+        $('next3').disabled = false;
+        if (!res.ok) { say('msg3', res.error || '設定できませんでした'); return; }
+        say('msg3', '');
+        if ($('autoChk').checked && !res.autostart) {
+          setDoneNote('自動ではじめる設定だけできませんでした。'
+                      + 'パソコンを起動したあとに Click Up Widget を開いてください。');
+        } else if (res.note) {
+          setDoneNote(res.note);
+        }
+        goto(4);
+      });
+    });
+
+    // 完了画面の説明を差し替える。
+    // 文言は textContent で入れる（Python から来た文字列を innerHTML に流し込まない）。
+    function setDoneNote(lead) {
+      const el = $('doneNote');
+      el.replaceChildren();
+
+      const head = document.createElement('div');
+      head.textContent = lead;
+      el.appendChild(head);
+
+      const tip = document.createElement('div');
+      tip.style.marginTop = '10px';
+      const enter = document.createElement('b');
+      enter.textContent = 'Ctrl + Enter';
+      const esc = document.createElement('b');
+      esc.textContent = 'Esc';
+      tip.append('書いたら ', enter, ' で登録、', esc, ' で閉じます。');
+      el.appendChild(tip);
+    }
+
+    // ── 4. 完了 ───────────────────────────────────────────────
+
+    $('next4').addEventListener('click', () => { if (bridge) bridge.startApp(); });
+  </script>
+</body>
+</html>
