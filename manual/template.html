@@ -561,6 +561,7 @@ app / runtime / mingit / manual / .git など
 </table>
 
 <table>
+  <tr><th>⊘</th><td>一覧に出さないリストを決める（下の「<a href="#wide-hide">出さないもの</a>」）</td></tr>
   <tr><th>↓ ↑</th><td>期限の並び順を入れ替える（はじめは期限が遠い順）</td></tr>
   <tr><th>⟳</th><td>取り直す</td></tr>
   <tr><th>✕</th><td>入力画面へ戻る（<kbd>Esc</kbd> でも戻れます）</td></tr>
@@ -572,18 +573,92 @@ app / runtime / mingit / manual / .git など
   ここに出るのは「自分が担当で、まだ終わっていないもの」で、ワークスペース全体から集めます。
 </p>
 
-<h3>出さないもの</h3>
+<h3>期限をその場でずらす</h3>
+
+<p>
+  行の右端に出ている期限（<strong>「今日」「3 日後」「2 日超過」</strong>など）を押すと、
+  登録するときと同じ 6 つが出ます。選ぶと、<strong>そのタスクの期限だけ</strong>が変わります。
+  今日やりきれなかったものを明日へ送るのに、ClickUp をブラウザで開く必要はありません。
+</p>
+
+<div class="shots">
+  <figure>
+    <img src="{{IMG:wide-reschedule}}" alt="期限を選び直すところ" width="330" />
+    <figcaption>期限を押すと 6 つ出ます（「いま」が今の期限）</figcaption>
+  </figure>
+</div>
+
+<div class="note">
+  ここで選んだものは、<strong>その 1 件にだけ効きます</strong>。次から登録するときの期限は
+  変わりません。そちらを変えたいときは、入力画面の期限を押して <strong>⌂</strong> の方を
+  押してください（<a href="#change">10. 設定を変えたいとき</a>）。
+</div>
+
+<p>
+  期限を変えると、その行がタブから外れて見えなくなることがあります。「今日」タブで明日へ送れば、
+  「今日」から消えて「今週」に出る、という具合です。下に出ている件数が動くので、そこで分かります。
+</p>
+
+<div class="warn">
+  ClickUp 側が変わったことを確かめてから、画面の行を書き換えます。変わらなかったときは
+  行はそのままで、理由が出ます。
+</div>
+
+<h3>絞り込む</h3>
+
+<p>
+  タブの下の欄に打つと、その場で絞り込めます。<strong>タスク名・メモ・リスト名</strong>のどれかに
+  当たれば残ります。空白で区切ると、その全部を含むものだけになります。
+</p>
+
+<div class="shots">
+  <figure>
+    <img src="{{IMG:wide-search}}" alt="絞り込んだところ" width="330" />
+    <figcaption>「見積」で絞ったところ</figcaption>
+  </figure>
+</div>
+
+<p>
+  打つたびに手元のぶんを絞るだけなので、待たされません。<kbd>Esc</kbd> を押すと、
+  まず絞り込みが消えます（もう一度押すと入力画面へ戻ります）。
+</p>
+
+<div class="note">
+  絞り込みはタブとは別に効きます。「今日」タブで探して 2 件しか出なくても、ほかのタブに
+  何件あるかは下に出ます（<strong>「ほかのタブに 4 件」</strong>）。ぜんぶ見たいときは
+  「すべて」タブを押してください。
+</div>
+
+<h3 id="wide-hide">出さないもの</h3>
 <p>一覧が工程管理のタスクで埋まらないよう、次のものは外しています。</p>
 <ul>
   <li>「本工事」「Mockup」「Maintenance」「施工中」のように、<strong>工程を表すステータスへ移っているタスク</strong><br />
       （中断メモは作られたときのまま「to do」に居るので、そこで見分けます）</li>
-  <li><code>config.json</code> の <code>"excluded_lists"</code> に書いたリストのぶん</li>
+  <li><strong>⊘</strong> でチェックを外したリストのぶん</li>
 </ul>
-<p>特定のリストをまるごと出したくないときは、<code>app\config.json</code> にリスト ID を書き足してください。</p>
-<div class="tree">"excluded_lists": ["900700321909"]</div>
-<p style="color:var(--ink-mid);font-size:14px">
-  リスト ID は、ClickUp でそのリストを開いたときの URL の末尾の数字です。
+
+<p>
+  特定のリストをまるごと出したくないときは、右上の <strong>⊘</strong> を押します。
+  チェックを外すと、そのリストのタスクは<strong>この一覧にも「最近登録したタスク」にも
+  出なくなります</strong>。戻すときも同じ場所です。
 </p>
+
+<div class="shots">
+  <figure>
+    <img src="{{IMG:wide-exclude}}" alt="出さないリストを選ぶところ" width="330" />
+    <figcaption>チェックを外すと、そのリストは出なくなります</figcaption>
+  </figure>
+</div>
+
+<p>
+  並びは「<strong>外してあるもの → いま一覧に出ているもの → 残り</strong>」の順です。
+  数が多いときは、上の欄にリスト名を打って絞れます。
+</p>
+
+<div class="note">
+  外してもタスクが消えるわけではありません。ClickUp にはそのまま残っていて、
+  このウィジットの一覧に出なくなるだけです。
+</div>
 
 <!-- ══════════════════════════════════════════ -->
 <h2 id="offline">7. ネットにつながっていないとき</h2>

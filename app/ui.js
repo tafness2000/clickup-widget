@@ -17,6 +17,8 @@ const wideFoot    = document.getElementById('wideFoot');
 const wideSort    = document.getElementById('wideSort');
 const wideReload  = document.getElementById('wideReload');
 const wideBack    = document.getElementById('wideBack');
+const wideSearch  = document.getElementById('wideSearch');
+const wideExclude = document.getElementById('wideExclude');
 
 const targetsRow    = document.getElementById('targetsRow');
 const chipList      = document.getElementById('chipList');
@@ -28,6 +30,7 @@ const chipDueLabel  = document.getElementById('chipDueLabel');
 const picker        = document.getElementById('picker');
 const pickerScrim   = document.getElementById('pickerScrim');
 const pickerSearch  = document.getElementById('pickerSearch');
+const pickerNote    = document.getElementById('pickerNote');
 const pickerList    = document.getElementById('pickerList');
 
 let bridge = null;
@@ -54,6 +57,10 @@ let RECENT = [];
 
 // よく使うもの。id の文字列を並べておくだけ。押した順は保つ。
 let FAV = { lists: [], members: [] };
+
+// 一覧に出さないリスト。config.json の excluded_lists と同じもの。
+// 読む側（どのタスクを一覧に載せるか）は Python が見ている。こちらは出し入れのため。
+let EXCLUDED = [];
 
 // 期限。start は常に今日で、動かすのは due だけ。
 const DUE_PRESETS = [
@@ -82,6 +89,7 @@ function setDirectory(data) {
     members: ((data.favorites || {}).members || []).map(String),
   };
   DEFAULT_DUE = data.default_due || 'today';
+  EXCLUDED = (data.excluded || []).map(String);
   resetTargets();
 }
 
@@ -343,16 +351,16 @@ function doSubmit() {
 
 submitBtn.addEventListener('click', doSubmit);
 
+// キーの行き先は、上に載っているものから順に決める。
+//
+//   1. 更新の知らせ          Esc で閉じるだけ（選ぶものが無い）
+//   2. 候補パネル            ↑↓ Enter Esc。広げた一覧の上に出ていてもこちらが先
+//   3. 広げた一覧            Esc は、絞り込みに文字があれば消す。無ければ入力へ戻る
+//   4. 入力画面              Esc で窓を閉じる、Ctrl+Enter で登録
+//
+// 2 が 3 より先なのが肝心。逆にすると、一覧から開いた期限のパネルで矢印も Enter も
+// 効かず、Esc を押すとパネルではなく一覧ごと閉じてしまう。
 document.addEventListener('keydown', e => {
-  // 広げている間は、こちらの決めごとだけを見る。
-  // Esc は窓を閉じるのではなく入力へ戻す（閉じたつもりで消えると打ち直しになる）。
-  if (WIDE.open) {
-    if (e.key === 'Escape') { e.preventDefault(); closeWide(); }
-    return;
-  }
-
-  if (e.ctrlKey && (e.key === 'e' || e.key === 'E')) { e.preventDefault(); openWide(); return; }
-
   // 更新の知らせは選ぶものが無いので、Esc で閉じるだけ。
   // 矢印や Enter を候補パネルの操作として拾わせない。
   if (state.kind === 'update') {
@@ -379,6 +387,21 @@ document.addEventListener('keydown', e => {
     }
     if (e.key === 'Tab') { closePicker(false); return; }
   }
+
+  // 広げている間は、こちらの決めごとだけを見る。
+  // Esc は窓を閉じるのではなく入力へ戻す（閉じたつもりで消えると打ち直しになる）。
+  // 絞り込んでいる最中なら、まずそれを消す。打った文字ごと一覧が畳まれると、
+  // 「絞り込みをやめたいだけ」のときに一覧を出し直すことになる。
+  if (WIDE.open) {
+    if (e.key === 'Escape') {
+      e.preventDefault();
+      if (WIDE.query) { clearWideSearch(); renderWide(); }
+      else            closeWide();
+    }
+    return;
+  }
+
+  if (e.ctrlKey && (e.key === 'e' || e.key === 'E')) { e.preventDefault(); openWide(); return; }
 
   if (e.ctrlKey && (e.key === 'l' || e.key === 'L')) { e.preventDefault(); openPicker('list'); return; }
   if (e.ctrlKey && (e.key === 'u' || e.key === 'U')) { e.preventDefault(); openPicker('user'); return; }

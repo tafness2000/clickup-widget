@@ -154,6 +154,44 @@ class Bridge(QObject):
             return json.dumps({'ok': False, 'error': _http_error(e)})
         return json.dumps({'ok': True})
 
+    @pyqtSlot(str, str, result=str)
+    def rescheduleTask(self, task_id: str, preset: str) -> str:
+        """一覧の 1 件だけ期限を送り直す。
+
+        既定の期限（setDefaultDue）とは別物。こちらは「そのタスクを明日へ送る」であって、
+        次から登録するものの期限は動かさない。
+        """
+        preset = str(preset or '').strip()
+        if preset not in appconfig.DUE_PRESETS:
+            return json.dumps({'ok': False, 'error': 'その期限は選べません'})
+        try:
+            due = clickup_api.reschedule_task(appconfig.load_config(), task_id, preset)
+        except Exception as e:
+            return json.dumps({'ok': False, 'error': _http_error(e)})
+        return json.dumps({'ok': True, 'due': due})
+
+    @pyqtSlot(str, bool, result=str)
+    def setListExcluded(self, list_id: str, excluded: bool) -> str:
+        """一覧に出さないリストの出し入れ。
+
+        これまでは config.json の excluded_lists を手で書くしかなく、リスト ID を
+        ClickUp の URL から拾ってくる必要があった。控えに実在するものだけを通す。
+        """
+        list_id = str(list_id or '').strip()
+        data  = directory.load(appconfig.BASE)
+        known = {str(item.get('id')) for item in data.get('lists', [])}
+        if not list_id or list_id not in known:
+            return json.dumps({'ok': False, 'error': 'そのリストは見つかりませんでした'})
+        try:
+            # 読み直してから直す。手で書いた分や、他の経路の変更を巻き戻さない。
+            updated = appconfig.update_config(
+                lambda cfg: appconfig.set_list_excluded(cfg, list_id, excluded))
+        except Exception as e:
+            appconfig.log(f'警告: 出さないリストを保存できませんでした ({e})')
+            return json.dumps({'ok': False, 'error': '保存できませんでした'})
+        appconfig.log(f"リストを一覧から{'外しました' if excluded else '戻しました'}（{list_id}）")
+        return json.dumps({'ok': True, 'excluded': appconfig.excluded_lists(updated)})
+
     # ── 広げた一覧 ────────────────────────────────────────────
 
     @pyqtSlot()

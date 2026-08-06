@@ -73,12 +73,17 @@
         <button class="wide-tab"    type="button" data-scope="all">すべて</button>
       </div>
       <div class="wide-actions">
+        <button class="wide-icon" id="wideExclude" type="button"
+                title="一覧に出さないリスト">⊘</button>
         <button class="wide-icon" id="wideSort" type="button"
                 title="いまは期限が遠い順。押すと近い順（期限切れが上）">↓</button>
         <button class="wide-icon" id="wideReload" type="button" title="取り直す">⟳</button>
         <button class="wide-icon" id="wideBack" type="button" title="入力へ戻る（Esc）">✕</button>
       </div>
     </div>
+    <!-- 打つたびに手元の分を絞るだけ。通信しないので待ちがない。 -->
+    <input class="wide-search" id="wideSearch" type="text"
+           autocomplete="off" spellcheck="false" placeholder="タスク名・メモ・リストで絞り込む…" />
     <div class="wide-body" id="wideBody">
       <div class="feed-note">読み込み中…</div>
     </div>
@@ -88,6 +93,8 @@
   <div id="picker">
     <input class="picker-search" id="pickerSearch" type="text"
            autocomplete="off" spellcheck="false" placeholder="絞り込む…" />
+    <!-- 出さないリストのときだけ出る。何が起きるかを先に言っておく。 -->
+    <div class="picker-note" id="pickerNote"></div>
     <div class="picker-list" id="pickerList"></div>
   </div>
 

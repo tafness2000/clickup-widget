@@ -448,3 +448,33 @@ def complete_task(cfg: dict, task_id: str, list_id: str | None = None) -> None:
     if got.lower() != target.strip().lower():
         raise RuntimeError(f'完了になりませんでした'
                            f'（「{target}」を送りましたが「{got}」のままです）')
+
+
+def _same_local_day(a_ms: int, b_ms: int) -> bool:
+    """同じ日か。時刻は見ない。"""
+    return (datetime.fromtimestamp(a_ms / 1000).date()
+            == datetime.fromtimestamp(b_ms / 1000).date())
+
+
+def reschedule_task(cfg: dict, task_id: str, preset: str) -> int | None:
+    """期限だけ差し替える。ClickUp が持つことになった期限（ミリ秒。'none' なら None）を返す。
+
+    始まりの日は触らない。中断した日が消えると、後から見て「いつ止めたか」が分からなくなる。
+    完了と同じで、変わったことを応答で確かめてから返る。画面が行を書き換えるのは
+    ここが例外を投げなかったときだけなので、確かめずに返すと嘘の期限が残る。
+
+    ただし送った時刻のままにはならない。こちらは日の終わり（23:59:59）を送るが、
+    ClickUp は時刻を持たない期限をその日の 04:00 に丸めて保存する。そこで確かめるのは
+    日付だけにして、返すのは丸めたあとの値にする。送った値の方を返すと、画面の表示と
+    ClickUp の中身が食い違ったままになる。
+    """
+    due  = due_at(datetime.now(), preset)
+    want = int(due.timestamp() * 1000) if due is not None else None
+    task = api_request(cfg, f'task/{seg(task_id)}', method='PUT',
+                       body={'due_date': want, 'due_date_time': False})
+
+    raw = task.get('due_date')
+    got = None if raw in (None, '') else int(raw)   # 数値を文字列で返すことがある
+    if (got is None) != (want is None) or (want is not None and not _same_local_day(got, want)):
+        raise RuntimeError(f'期限が変わりませんでした（{want} を送りましたが {got} のままです）')
+    return got

@@ -119,18 +119,38 @@ function highlight(text, tokens) {
 
 // ── 候補パネル ────────────────────────────────────────────
 
-const state = { kind: null, rows: [], active: 0 };
+// target は「何に対して選んでいるか」。期限ずらしのときだけ入る（対象の 1 件）。
+const state = { kind: null, rows: [], active: 0, target: null };
 
 function isOpen() { return state.kind !== null; }
 
+// 選ぶものが 6 つで固定のパネル。検索欄を出さず、丈も詰める。
+function isFixedList(kind) { return kind === 'due' || kind === 'reschedule'; }
+
 function renderPicker() {
   const q = pickerSearch.value;
-  const tokens = state.kind === 'due' ? [] : tokenize(q);
-  state.rows = state.kind === 'list' ? searchLists(q)
-             : state.kind === 'user' ? searchMembers(q)
+  const tokens = isFixedList(state.kind) ? [] : tokenize(q);
+  state.rows = state.kind === 'list'       ? searchLists(q)
+             : state.kind === 'user'       ? searchMembers(q)
+             : state.kind === 'exclude'    ? searchExclude(q)
+             : state.kind === 'reschedule' ? searchReschedule()
              : searchDue();
   // 開き直したとき、いま選んでいるものに合わせておく（毎回先頭に戻さない）。
-  state.active = Math.max(0, state.rows.findIndex(r => r.item.id === currentPick().id));
+  //
+  // 当たるものが無いときは、どこも光らせない（-1）。
+  //   ・出さないリスト  … そもそも「選んであるもの」という概念が無い
+  //   ・期限ずらし      … いまの期限が 6 つのどれでもないことがある（「3 日後」など）
+  // ここで先頭を光らせると「今日が選んである」ように見えて、Enter を押した拍子に
+  // その期限へ動いてしまう。出さないリストなら、そのリストが一覧から外れてしまう。
+  const found = state.rows.findIndex(r => r.item.id === currentPick().id);
+  state.active = state.kind === 'exclude' ? -1
+               : found >= 0               ? found
+               : isFixedList(state.kind)  ? -1 : 0;
+
+  pickerNote.textContent = state.kind === 'exclude'
+    ? 'チェックを外したリストは、この一覧にも「最近登録したタスク」にも出なくなります'
+    : '';
+  pickerNote.style.display = state.kind === 'exclude' ? '' : 'none';
 
   pickerList.replaceChildren();
   if (!state.rows.length) {
@@ -144,13 +164,65 @@ function renderPicker() {
   // 200 件を全部組むと打鍵ごとに重くなるので、見えるぶんだけに切る。
   state.rows = state.rows.slice(0, 60);
   state.rows.forEach((row, index) => pickerList.appendChild(buildPickerRow(row, index, tokens)));
-  if (state.active) setActive(state.active);      // 選んであるところまで送る
+  // 選んであるところまで送る。-1（どこも光らせない）のときは触らない。
+  if (state.active > 0) setActive(state.active);
+}
+
+// ── その 1 件の期限を選び直す ──────────────────────────────
+
+// 既定を変える話ではないので ⌂ は出さない。いま付いている期限に「いま」と付けるだけ。
+function searchReschedule() {
+  const now = currentDuePreset(state.target.task);
+  return DUE_PRESETS.map(item => ({ item, tag: item.id === now ? 'いま' : '' }));
+}
+
+// いま付いている期限が 6 つのどれに当たるか。当たらなければ ''。
+// 「3 日後」などは日付そのものが残っているだけで、どのプリセットで入れたかは分からない。
+function currentDuePreset(task) {
+  if (!task.due) return 'none';
+  const label = dueLabel(task.due);
+  if (label.text === '今日') return 'today';
+  if (label.text === '明日') return 'tomorrow';
+  return '';
+}
+
+// ── 一覧に出さないリスト ──────────────────────────────────
+
+// 並びが肝心。「200 件から探して外す」ではなく、動機はいつでも
+// 「いま見えているこの行のリストが邪魔」なので、その順に並べる。
+function searchExclude(q) {
+  const tokens = tokenize(q);
+  const phrase = tokens.join(' ');
+  const inView = new Set(WIDE_TASKS.map(t => String(t.list_id)).filter(Boolean));
+  const rankOf = item => EXCLUDED.includes(String(item.id)) ? 0
+                       : inView.has(String(item.id))        ? 1 : 2;
+  // タグは「外してある」だけ。いま出ているものぜんぶに付けると、
+  // 全行に同じ札が並んで何も言っていないのと同じになる（並びが上なのがその印）。
+  const tagOf  = item => EXCLUDED.includes(String(item.id)) ? '外してある' : '';
+  return DIR.lists
+    .filter(item => !tokens.length || rankList(item, tokens, phrase) >= 0)
+    .map(item => ({ item, tag: tagOf(item), rank: rankOf(item) }))
+    .sort((a, b) => a.rank - b.rank)     // 同じ段の中は元の並びのまま（sort は安定）
+    .map(r => ({ item: r.item, tag: r.tag }));
+}
+
+// チェックの入り切りにする。「出す・出さない」は入り切りの話であって、
+// ◉ のような記号では、いまどちらの状態なのかが読み取れない。
+function buildEyeButton(item) {
+  const off = EXCLUDED.includes(String(item.id));
+  const eye = document.createElement('button');
+  eye.type = 'button';
+  eye.className = 'pick-eye' + (off ? ' off' : '');
+  eye.textContent = off ? '☐' : '☑';
+  eye.title = off ? '一覧に出すようにする' : 'このリストは一覧に出さない';
+  fixMousedown(eye, () => toggleExcluded(item));
+  return eye;
 }
 
 // 候補 1 行ぶん。行の下に出す文字は、リストなら親フォルダ、
 // 担当者ならメールアドレス、期限なら言い換え。
 function pickerSubText(item) {
-  if (state.kind === 'list') return item.path  || '';
+  if (state.kind === 'list' || state.kind === 'exclude') return item.path  || '';
   if (state.kind === 'user') return item.email || '';
   return item.hint || '';
 }
@@ -207,7 +279,7 @@ function buildPickerRow(row, index, tokens) {
   const sub = pickerSubText(row.item);
   if (sub) {
     const path = document.createElement('div');
-    path.className = state.kind === 'due' ? 'pick-hint' : 'pick-path';
+    path.className = isFixedList(state.kind) ? 'pick-hint' : 'pick-path';
     path.appendChild(highlight(sub, tokens));
     body.appendChild(path);
   }
@@ -220,10 +292,17 @@ function buildPickerRow(row, index, tokens) {
     el.appendChild(tag);
   }
 
-  // 既定はリストと期限にしかない。まだ既定でないものだけ、ここから移せる。
-  if (state.kind !== 'user' && !isDefaultItem(row.item)) el.appendChild(buildPinButton(row.item));
+  // 既定を移せるのはリストと期限の候補だけ。期限ずらしは「その 1 件」を動かすもので、
+  // 既定とは別物なので ⌂ を出さない（出すと、1 件のつもりが次からぜんぶ変わる）。
+  if ((state.kind === 'list' || state.kind === 'due') && !isDefaultItem(row.item))
+    el.appendChild(buildPinButton(row.item));
   // 期限は数が決まっているので★を付ける意味がない。
-  if (state.kind !== 'due') el.appendChild(buildFavButton(row.item));
+  if (state.kind === 'list' || state.kind === 'user') el.appendChild(buildFavButton(row.item));
+  // 出さないリストは、選ぶのではなくその場で切り替える。
+  if (state.kind === 'exclude') {
+    el.classList.toggle('excluded', EXCLUDED.includes(String(row.item.id)));
+    el.appendChild(buildEyeButton(row.item));
+  }
 
   el.addEventListener('mousedown', e => { e.preventDefault(); choose(index); });
   el.addEventListener('mousemove', () => setActive(index));
@@ -239,20 +318,25 @@ function setActive(index) {
 }
 
 function currentPick() {
-  return state.kind === 'list' ? pickedList
-       : state.kind === 'user' ? pickedUser
-       : pickedDue;
+  if (state.kind === 'list')       return pickedList;
+  if (state.kind === 'user')       return pickedUser;
+  if (state.kind === 'reschedule') return { id: currentDuePreset(state.target.task) };
+  if (state.kind === 'exclude')    return { id: '' };   // 「いま選んでいるもの」は無い
+  return pickedDue;
 }
 
-function openPicker(kind) {
-  state.kind = kind;
+function openPicker(kind, target) {
+  state.kind   = kind;
+  state.target = target || null;
   pickerSearch.value = '';
-  pickerSearch.placeholder = kind === 'list' ? 'リストを絞り込む…' : '担当者を絞り込む…';
+  pickerSearch.placeholder = kind === 'exclude' ? '出したくないリストを探す…'
+                           : kind === 'list'    ? 'リストを絞り込む…'
+                           : '担当者を絞り込む…';
   picker.classList.add('open');
-  picker.classList.toggle('due', kind === 'due');
+  picker.classList.toggle('due', isFixedList(kind));
   pickerScrim.classList.add('open');
   renderPicker();
-  if (kind === 'due') return;    // 検索欄が無いので、キーは document 側で拾う
+  if (isFixedList(kind)) return;    // 検索欄が無いので、キーは document 側で拾う
   pickerSearch.focus();
   // リスト名も担当者名もアルファベット。ここに入ったら半角英数で打ち始めたい。
   // focus のあとに頼む（Chromium が要素に合わせて IME を触るのが先なので）。
@@ -264,17 +348,29 @@ function closePicker(backToChip) {
   // 更新の知らせは別物（選ぶものが無い）。専用の閉じ方に任せる。
   if (state.kind === 'update') { closeUpdatePanel(); return; }
   const kind = state.kind;
-  state.kind = null;
+  state.kind   = null;
+  state.target = null;
   picker.classList.remove('open', 'due');
   pickerScrim.classList.remove('open');
   pickerList.replaceChildren();
   // 入力モードは戻さない。閉じた後に戻そうとしても効かなかったため。
-  if (backToChip) (kind === 'list' ? chipList : kind === 'user' ? chipUser : chipDue).focus();
+  // 戻す先のチップがあるのは入力画面の 3 つだけ。一覧から開いたぶんには戻り先が無い。
+  if (backToChip && (kind === 'list' || kind === 'user' || kind === 'due'))
+    (kind === 'list' ? chipList : kind === 'user' ? chipUser : chipDue).focus();
 }
 
 function choose(index) {
   const row = state.rows[index];
   if (!row) return;
+  // 出さないリストは選ぶものではなく、その場で切り替えるもの。パネルは開けたままにする
+  //（続けて何件か外したいことが多い）。
+  if (state.kind === 'exclude') { toggleExcluded(row.item); return; }
+  if (state.kind === 'reschedule') {
+    const target = state.target;      // 閉じると消えるので先に控える
+    closePicker(false);
+    applyReschedule(target, row.item.id);
+    return;
+  }
   if (state.kind === 'list')      pickedList = row.item;
   else if (state.kind === 'user') pickedUser = row.item;
   else                            pickedDue  = row.item;

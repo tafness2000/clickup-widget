@@ -108,6 +108,12 @@ class Stub(QObject):
     @pyqtSlot(str, str, result=str)
     def completeTask(self, *a): return json.dumps({'ok': True})
 
+    @pyqtSlot(str, str, result=str)
+    def rescheduleTask(self, *a): return json.dumps({'ok': True, 'due': None})
+
+    @pyqtSlot(str, bool, result=str)
+    def setListExcluded(self, *a): return json.dumps({'ok': True, 'excluded': []})
+
     @pyqtSlot(str)
     def openTask(self, url): pass
 
@@ -264,7 +270,51 @@ def shot_wide_overdue():
     js('WIDE.scope = "overdue";'
        '[...wideTabs.children].forEach(el => el.classList.toggle("on", el.dataset.scope === "overdue"));'
        'renderWide();')
-    grab('wide-overdue', load_setup)
+    grab('wide-overdue', shot_wide_reschedule)
+
+
+def shot_wide_reschedule():
+    """行の期限を押して、6 つから選び直すところ。
+
+    タブは「期限切れ」のまま撮る。切り替えた直後は、暗幕が乗ったときに前のタブが
+    中途半端に目立って、どれが選ばれているのか読み取れない写真になる。
+    期限切れのものを送り直す場面は、説明の流れにもそのまま合う。
+    """
+    js('openPicker("reschedule", {task: wideRows()[0],'
+       ' el: document.querySelectorAll(".wide-due")[0]});')
+    grab('wide-reschedule', shot_wide_search)
+
+
+def shot_wide_search():
+    """絞り込んだところ。タブは「すべて」にしておく（絞り込みはタブと別に効く）。"""
+    js('closePicker(false);'
+       'WIDE.scope = "all";'
+       '[...wideTabs.children].forEach(el => el.classList.toggle("on", el.dataset.scope === "all"));'
+       'wideSearch.value = "見積"; WIDE.query = "見積"; wideSearch.classList.add("on");'
+       'renderWide();')
+    grab('wide-search', shot_wide_exclude)
+
+
+def shot_wide_exclude():
+    """出さないリストのパネル。1 つ外してある状態にして、戻し方も見えるようにする。"""
+    # 後ろの一覧からもそのリストのぶんを落とす。外してあるのに一覧に残っていると、
+    # 写真の中で辻褄が合わなくなる。
+    js('clearWideSearch();'
+       'EXCLUDED = DIR.lists.length ? [String(DIR.lists[DIR.lists.length - 1].id)] : [];'
+       'WIDE_TASKS = WIDE_TASKS.filter(t => !EXCLUDED.includes(String(t.list_id)));'
+       'renderWide();'
+       'openPicker("exclude");')
+    grab('wide-exclude', close_and_load_setup)
+
+
+def close_and_load_setup():
+    """パネルを閉じてから初回設定へ移る。
+
+    開いたまま移ると、次の画面の描画が間に合わず、前の画面が写ったままの写真になる
+    （QWebEngineView は新しいページを描き終えるまで前の絵を持ち続ける）。
+    """
+    js('closePicker(false);')
+    QTimer.singleShot(400, load_setup)
 
 
 # ── 初回設定 ──────────────────────────────────────────────────
@@ -279,7 +329,9 @@ def start_setup(_ok):
     view.loadFinished.disconnect(start_setup)
     # 置き場所は Bridge が入れる。ここは繋いでいないので、架空のパスを流し込む。
     js(r'document.getElementById("pathBox").textContent = "C:\\Tools\\ClickUpWidget";')
-    grab('setup-0', shot_setup1)
+    # 読み込み終わり（loadFinished）は描き終わりではない。GPU を使わない設定だと
+    # 描画が遅れて、前の画面が写ったままの写真になる。ここだけ長めに待つ。
+    grab('setup-0', shot_setup1, wait=1500)
 
 
 def shot_setup1():

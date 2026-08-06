@@ -579,3 +579,92 @@ body.wide #wideArea {
   line-height: 1.55;
   padding: 0 26px;
 }
+
+/* ── 一覧の絞り込み ── */
+
+/* タブの行の下に置く。ヘッダはタブ 4 つとアイコン 4 つで既に詰まっている。
+   常に出しておく。アイコンで開閉させると、あることに気づかれないため。 */
+.wide-search {
+  flex: none;
+  width: 100%; height: 26px;
+  background: var(--input-bg);
+  border: 1.5px solid var(--input-border);
+  border-radius: 8px;
+  padding: 0 9px;
+  margin-bottom: 7px;
+  color: var(--text);
+  font-family: inherit; font-size: 11px;
+  outline: none;
+  transition: border-color 0.15s;
+}
+.wide-search:focus { border-color: var(--input-focus); }
+.wide-search::placeholder { color: var(--text-dim); }
+
+/* 絞り込み中は、そうと分かるようにしておく。件数だけだと
+   「取れていない」のか「絞ってある」のかが見分けられない。 */
+.wide-search.on { border-color: var(--input-focus); }
+
+/* ── 期限を押して変える ── */
+
+/* div から button へ。ふだんは今までと同じ顔のまま、行に触れたときだけ
+   枠が出て「押せる」と分かるようにする。常に枠を出すと、20 行ぶん並んだときに
+   一覧が枠だらけになって、肝心の期限の色（超過の赤・今日の黄）が沈む。 */
+button.wide-due {
+  font-family: inherit; font-size: 10px;
+  color: var(--text-mid); white-space: nowrap;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  padding: 1px 5px;
+  margin: -1px -5px;              /* 枠のぶん行がずれないように、外へ食い込ませる */
+  cursor: pointer;
+  transition: background 0.12s, border-color 0.12s;
+}
+.wide-row:hover button.wide-due { border-color: var(--input-border); }
+button.wide-due:hover {
+  background: rgba(255,255,255,0.14);
+  border-color: var(--input-focus);
+  color: var(--text);
+}
+button.wide-due.over  { color: var(--error); }
+button.wide-due.today { color: #FBBF24; }
+
+/* 送っている間。返事を待たずに行を書き換えると、失敗したとき嘘になる。 */
+button.wide-due.busy { opacity: 0.45; cursor: default; }
+
+/* ── 出さないリスト ── */
+
+/* 何が起きるかを、押す前に言っておく。取り消しはできるが、
+   「一覧から消えた」だけを見せられると壊れたように見える。 */
+.picker-note {
+  flex: none;
+  font-size: 10px; color: var(--text-dim);
+  line-height: 1.45;
+  padding: 0 7px 6px;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 6px;
+}
+
+/* ★ と同じ形。ただし常に見せる（付いているかどうかがこのパネルの主題なので、
+   ふだん隠していると探して当てることになる）。 */
+.pick-eye {
+  flex: none;
+  width: 26px; height: 26px;
+  display: flex; align-items: center; justify-content: center;
+  border: none; background: transparent;
+  color: var(--text-dim);
+  font-size: 13px; line-height: 1;
+  cursor: pointer; padding: 0;
+  border-radius: 6px;
+  opacity: 0.55;
+  transition: opacity 0.12s, color 0.12s, background 0.12s;
+}
+.pick-row:hover .pick-eye,
+.pick-row.active .pick-eye { opacity: 1; }
+.pick-eye:hover { background: rgba(255,255,255,0.12); color: var(--text); }
+/* 外してあるものは常に見せる。外れていることが並び順の理由なので。 */
+.pick-eye.off { opacity: 1; color: var(--error); }
+
+/* 外してあるリストは、名前でも分かるようにする。記号だけだと
+   ぱっと見でどちらの状態か読み取れない。 */
+.pick-row.excluded .pick-name { color: var(--text-dim); text-decoration: line-through; }

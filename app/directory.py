@@ -102,4 +102,5 @@ def build_payload(cfg: dict, data: dict) -> dict:
         'recent':      [str(x) for x in cfg.get('recent_lists', [])],
         'favorites':   appconfig.favorites(cfg),
         'default_due': cfg.get('default_due_preset') or 'today',
+        'excluded':    appconfig.excluded_lists(cfg),
     }

@@ -262,6 +262,29 @@ def toggle_favorite(cfg: dict, kind: str, item_id: str) -> dict:
                         else [*kept, item_id]}
 
 
+def excluded_lists(cfg: dict) -> list[str]:
+    """一覧に出さないリスト。画面へ渡す形（文字列の並び）で取り出す。
+
+    どのタスクを一覧に載せるかを決めているのは clickup_api.is_memo の側。
+    ここは出し入れのためだけにある。
+    """
+    return [str(x) for x in cfg.get('excluded_lists', [])]
+
+
+def set_list_excluded(cfg: dict, list_id: str, excluded: bool) -> dict:
+    """一覧に出す・出さないを決めた新しい設定を返す。
+
+    入れ替え（トグル）ではなく「こうする」を受け取る。画面が持っている状態と
+    設定がずれていても同じ結果に落ち着かせるため。トグルだと、ずれたまま
+    反対側へ倒れて、押すたびに食い違いが続く。
+    """
+    list_id = str(list_id or '')
+    if not list_id:
+        return cfg
+    kept = [x for x in excluded_lists(cfg) if x != list_id]
+    return {**cfg, 'excluded_lists': [*kept, list_id] if excluded else kept}
+
+
 def remember_list(cfg: dict, list_id: str) -> dict:
     """直前に使った登録先を覚えた新しい設定を返す。
 
