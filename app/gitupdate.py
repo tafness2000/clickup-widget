@@ -204,7 +204,7 @@ def save_status(data: dict) -> None:
         with open(temporary, 'w', encoding='utf-8') as f:
             json.dump(data, f, indent=2, ensure_ascii=False)
         os.replace(temporary, status_path())
-    except OSError as e:
+    except (OSError, ValueError) as e:
         appconfig.log(f'警告: 更新の状態を保存できませんでした ({e})')
 
 

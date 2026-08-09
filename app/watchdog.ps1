@@ -41,6 +41,27 @@ function Test-Updating {
     }                      # 起動を試す方に倒す
 }
 
+# 自動起動の登録（スタートアップの .lnk）が指している先。
+#
+# 同梱の runtime が無いパソコン（開発中や、Python を別に入れて使っているとき）では、
+# ここにしか「このパソコンでの正しい起動のしかた」が無い。startup.py が書いたものなので、
+# 自動起動が動いているなら見張り役も同じやり方で起こせる。
+#
+# いまいるフォルダを指しているものだけを使う。引っ越した直後などに前の場所を指したままの
+# 登録が残っていると、そちらを起こして別の場所の常駐が立ってしまう。
+function Get-AutostartTarget {
+    $lnk = Join-Path ([Environment]::GetFolderPath('Startup')) 'PauseTask.lnk'
+    if (-not (Test-Path $lnk)) { return $null }
+    try {
+        $s = (New-Object -ComObject WScript.Shell).CreateShortcut($lnk)
+        if (-not $s.TargetPath -or -not (Test-Path $s.TargetPath)) { return $null }
+        if ($s.Arguments.IndexOf($root, [StringComparison]::OrdinalIgnoreCase) -lt 0) { return $null }
+        return @{ Path = $s.TargetPath; Args = $s.Arguments; Dir = $s.WorkingDirectory }
+    } catch {
+        return $null
+    }
+}
+
 try {
     # 更新の最中は手を出さない。updater は常駐をいったん落としてからファイルを
     # 書き換えるので、その隙にここが起動すると、書き換え途中のコードを読んだ常駐が
@@ -71,7 +92,21 @@ try {
             Start-Process -FilePath $launchBat -WorkingDirectory $root -WindowStyle Hidden
             Write-Log '常駐が停止していたため launch.bat で起動しました'
         } else {
-            Write-Log "起動できるファイルがありません（runtime\pythonw.exe / launch.bat のいずれも見つからず）"
+            # 同梱の runtime が無いとき。自動起動が使っているのと同じやり方で起こす。
+            # ここが無いと、開発中や Python を別に入れて使っているパソコンでは
+            # 「見張り役は動いているのに、落ちても戻せない」状態になる。
+            $auto = Get-AutostartTarget
+            if ($auto) {
+                $dir = if ($auto.Dir) { $auto.Dir } else { $root }
+                if ($auto.Args) {
+                    Start-Process -FilePath $auto.Path -ArgumentList $auto.Args -WorkingDirectory $dir
+                } else {
+                    Start-Process -FilePath $auto.Path -WorkingDirectory $dir
+                }
+                Write-Log '常駐が停止していたため、自動起動と同じやり方で起動しました'
+            } else {
+                Write-Log "起動できるものがありません（runtime\pythonw.exe / launch.bat / 自動起動の登録、いずれも使えず）"
+            }
         }
     }
 } catch {

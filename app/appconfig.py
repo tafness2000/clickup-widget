@@ -49,7 +49,17 @@ _BIDI_CONTROLS = str.maketrans('', '', '‪‫‬‭‮'
 
 
 def plain(text: str) -> str:
-    return (text or '').translate(_BIDI_CONTROLS)
+    """外から来た文字を、表示しても持ち回っても壊れない形にする。
+
+    落とすのは 2 種類。
+
+    ・文字の並ぶ向きを変える制御文字（上記）
+    ・対にならないサロゲート。絵文字を途中で切って貼り付けたときなどに混ざる。
+      JSON からは読めてしまうのに UTF-8 では書けないので、そのまま持ち回ると
+      保存する段になって初めて落ちる。しかも UnicodeEncodeError は OSError では
+      ないため、保存まわりの except OSError をすり抜けて上まで飛んでいく。
+    """
+    return (text or '').translate(_BIDI_CONTROLS).encode('utf-8', 'replace').decode('utf-8')
 
 
 # ── ログ ──────────────────────────────────────────────────────
@@ -91,7 +101,10 @@ def _unseal(data: dict) -> dict:
     """
     encoded = data.get(TOKEN_ENC_KEY)
     if not encoded:
-        return data                      # まだ平文の世代。次に保存するとき暗号化される
+        # まだ平文の世代。次に保存するとき暗号化される。
+        # 手で書き換えられてキーごと無い形もありうるので、空で埋めてから返す
+        #（この先には cfg['api_token'] と添字で触る箇所がある）。
+        return {TOKEN_KEY: '', **data}
     rest = {k: v for k, v in data.items() if k != TOKEN_ENC_KEY}
     try:
         return {**rest, TOKEN_KEY: secretstore.decrypt(encoded)}

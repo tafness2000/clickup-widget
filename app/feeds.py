@@ -19,16 +19,28 @@ class TaskFeed(QObject):
     """中断中タスクの取得。取れたぶんを後から流し込む。"""
     loaded = pyqtSignal(str)
 
-    def refresh(self, cfg: dict) -> None:
-        threading.Thread(target=self._fetch, args=(cfg,), daemon=True).start()
+    def __init__(self) -> None:
+        super().__init__()
+        # 何回目の依頼か。窓を出すたびに取り直すので、続けて呼び出されると
+        # 2 本目が走る。ネットワークの返りは頼んだ順とは限らないので、
+        # 遅れて届いた古い一覧で新しい一覧を上書きしないための目印。
+        self._generation = 0
 
-    def _fetch(self, cfg: dict) -> None:
+    def refresh(self, cfg: dict) -> None:
+        self._generation += 1
+        threading.Thread(target=self._fetch, args=(cfg, self._generation),
+                         daemon=True).start()
+
+    def _fetch(self, cfg: dict, generation: int) -> None:
         try:
             tasks = clickup_api.fetch_open_tasks(cfg)
         except Exception as e:
             appconfig.log(f'警告: 中断中タスクを取得できませんでした ({e})')
-            self.loaded.emit(json.dumps({'ok': False}))
+            if generation == self._generation:
+                self.loaded.emit(json.dumps({'ok': False}))
             return
+        if generation != self._generation:
+            return                      # もっと新しい依頼が出ている。これは捨てる
         self.loaded.emit(json.dumps({'ok': True, 'tasks': tasks}, ensure_ascii=True))
 
 
@@ -74,25 +86,33 @@ class DirectoryFeed(QObject):
     """
     loaded = pyqtSignal(str)
 
-    def refresh(self, cfg: dict) -> None:
-        threading.Thread(target=self._fetch, args=(cfg,), daemon=True).start()
+    def __init__(self) -> None:
+        super().__init__()
+        self._generation = 0        # TaskFeed と同じ理由。古い結果で新しいものを潰さない
 
-    def _fetch(self, cfg: dict) -> None:
+    def refresh(self, cfg: dict) -> None:
+        self._generation += 1
+        threading.Thread(target=self._fetch, args=(cfg, self._generation),
+                         daemon=True).start()
+
+    def _fetch(self, cfg: dict, generation: int) -> None:
         try:
             data = clickup_api.fetch_directory(cfg, on_warn=lambda m: appconfig.log(f'警告: {m}'))
         except Exception as e:
             appconfig.log(f'警告: リスト・メンバーの一覧を取得できませんでした ({e})')
             return
+        if generation != self._generation:
+            return                  # もっと新しい依頼が出ている。控えも書き替えない
         try:
             directory.save(appconfig.BASE, data)
-        except OSError as e:
+        except (OSError, ValueError) as e:
             appconfig.log(f'警告: リスト・メンバーの控えを保存できませんでした ({e})')
 
         # 読み直してから直す。取得している間に★が押されていても巻き戻さない。
         # 保存できなくても候補は画面へ渡す（名前が埋まらないだけで、選ぶのに支障はない）。
         try:
             filled = appconfig.update_config(lambda latest: directory.fill_names(latest, data))
-        except OSError as e:
+        except (OSError, ValueError) as e:
             appconfig.log(f'警告: 設定に名前を補えませんでした ({e})')
             filled = appconfig.load_config()
 

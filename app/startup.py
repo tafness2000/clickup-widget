@@ -32,12 +32,18 @@ POWERSHELL = _powershell_path()
 
 
 def _powershell(args: list[str], extra_env: dict | None = None) -> tuple[bool, str]:
-    """PowerShell を黙って走らせる。(成功したか, 出力) を返す。"""
+    """PowerShell を黙って走らせる。(成功したか, 出力) を返す。
+
+    errors='replace' を付けるのは、読めない文字が混ざったときに落ちないため。
+    PowerShell が返すのはこのパソコンの既定の文字コード（日本語環境なら cp932）で、
+    パスに入っている文字によってはそこで表せないものが出る。落ちると、登録できなかった
+    本当の理由の代わりに「文字を読めなかった」という話がログに残ることになる。
+    """
     cmd = [POWERSHELL, '-NoProfile', '-ExecutionPolicy', 'Bypass', *args]
     try:
         done = subprocess.run(
-            cmd, capture_output=True, text=True, timeout=TIMEOUT_SEC,
-            creationflags=CREATE_NO_WINDOW,
+            cmd, capture_output=True, text=True, errors='replace',
+            timeout=TIMEOUT_SEC, creationflags=CREATE_NO_WINDOW,
             env={**os.environ, **(extra_env or {})},
         )
     except Exception as e:

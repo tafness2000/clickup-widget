@@ -217,8 +217,33 @@ function setDefaultDue(item) {
 // 自動で入れたメモ。手で直されたかを見分けるために覚えておく。
 let autoMemo = '';
 
+// 少し置いてから窓を閉じる／表示を戻すためのタイマー。1 つだけ持っておく。
+// 呼び直されたときに取り消せないと、出し直した直後に前の名残で勝手に隠れる。
+let pendingTimer = null;
+
+function later(ms, run) {
+  cancelLater();
+  pendingTimer = setTimeout(() => { pendingTimer = null; run(); }, ms);
+}
+
+function cancelLater() {
+  if (pendingTimer) { clearTimeout(pendingTimer); pendingTimer = null; }
+}
+
+// 出しっぱなしのまま、もう一度呼ばれたとき。pause.pyw は必ずここを通す。
+//
+// 「登録しました」や更新の知らせを出したままだと、打つ画面へ戻さない限り
+// Ctrl+Enter も効かないまま固まって見える（送信中の札を下ろすのは resetForm だけ）。
+// 呼び直された以上、閉じるつもりで仕掛けたタイマーも取り消す。
+function wakeUp(context) {
+  cancelLater();
+  if (successArea.style.display !== 'none') { resetForm(context); return; }
+  if (context) refreshContext(context);      // 空で上書きしてメモを消さない
+}
+
 // context には中断直前まで前にいたウィンドウ名が入る。あくまで下書きなので消して構わない。
 function resetForm(context) {
+  cancelLater();
   taskInput.value = '';
   autoMemo = context || '';
   memoInput.value = autoMemo;
@@ -240,7 +265,10 @@ function refreshContext(context) {
     autoMemo = context || '';
     memoInput.value = autoMemo;
   }
-  if (!taskInput.value) setTimeout(() => taskInput.focus(), 30);
+  // 候補パネルが出ている間はフォーカスを動かさない。パネルは入力欄を隠さない
+  //（暗幕の下で生きている）ので、ここで移すと絞り込みに打っている続きが
+  // 見えないまま入力欄へ流れ込み、絞り込みが反応しなくなる。
+  if (!taskInput.value && !isOpen()) setTimeout(() => taskInput.focus(), 30);
 }
 
 function feedNote(text) {
@@ -266,9 +294,7 @@ function buildRow(task) {
     e.stopPropagation();
     if (!bridge) return;
     check.disabled = true;
-    // 完了を表すステータス名はリストごとに違うので、どのリストの分かも渡す。
-    bridge.completeTask(task.id, String(task.list_id || ''), raw => {
-      const res = JSON.parse(raw);
+    pendingComplete.set(String(task.id), res => {
       if (res.ok) {
         row.remove();
         if (!feedBody.children.length) feedNote('最近登録したタスクはありません');
@@ -277,6 +303,8 @@ function buildRow(task) {
         showError(res.error || '完了にできませんでした');
       }
     });
+    // 完了を表すステータス名はリストごとに違うので、どのリストの分かも渡す。
+    bridge.completeTask(String(task.id), String(task.list_id || ''));
   });
 
   const text = document.createElement('div');
@@ -330,23 +358,36 @@ function doSubmit() {
   submitting = true;
   submitBtn.disabled = true;
   bridge.submit(name, memoInput.value, String(pickedList.id), String(pickedUser.id),
-                pickedDue.id, raw => {
-    const data = JSON.parse(raw);
-    if (data.ok) {
-      // 送れずに退避した場合は、登録できたように見せずそのことを伝える。
-      successText.textContent = data.queued
-        ? '接続できないため保存しました。つながり次第、登録します'
-        : '登録しました';
-      formArea.style.display = 'none';
-      successArea.style.display = 'flex';
-      setTimeout(() => bridge.closeWindow(), data.queued ? 1800 : 600);
-    } else {
-      // 失敗したときだけ解除する。成功したら窓ごと引っ込むので戻す必要がない。
-      submitting = false;
-      showError(data.error || '登録に失敗しました');
-      submitBtn.disabled = false;
-    }
-  });
+                pickedDue.id);
+}
+
+// 登録の結果。送るのは裏でやっているので、返事はここへ届く
+//（待っている間も窓は動くし、ホットキーも効く）。
+function onSubmitDone(data) {
+  if (data.ok) {
+    // 送れずに退避した場合は、登録できたように見せずそのことを伝える。
+    successText.textContent = data.queued
+      ? '接続できないため保存しました。つながり次第、登録します'
+      : '登録しました';
+    formArea.style.display = 'none';
+    successArea.style.display = 'flex';
+    later(data.queued ? 1800 : 600, () => bridge.closeWindow());
+    return;
+  }
+  // 失敗したときだけ解除する。成功したら窓ごと引っ込むので戻す必要がない。
+  submitting = false;
+  showError(data.error || '登録に失敗しました');
+  submitBtn.disabled = false;
+}
+
+// 完了の返事を、押した行へ配る。裏で送るので、どの行の分かは id で引き当てる。
+const pendingComplete = new Map();
+
+function onTaskCompleted(res) {
+  const done = pendingComplete.get(String(res.id));
+  if (!done) return;
+  pendingComplete.delete(String(res.id));
+  done(res);
 }
 
 submitBtn.addEventListener('click', doSubmit);

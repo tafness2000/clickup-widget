@@ -185,6 +185,23 @@ def step_check_code(log: Log, backup: str) -> None:
                      f'控えは {backup} にあります。')
 
 
+def _spawn_resident() -> tuple[str, str]:
+    """常駐を起こす。(使った Python, 起こしたファイル) を返す。
+
+    記録を残す前の段階からも呼ぶので、ここではログを書かない。
+    起こせるものが無ければ ('', '') を返す。
+    """
+    script = os.path.join(appconfig.BASE, 'pause.pyw')
+    if not os.path.exists(script):
+        return '', ''
+    pythonw = os.path.join(os.path.dirname(appconfig.BASE), 'runtime', 'pythonw.exe')
+    if not os.path.exists(pythonw):
+        pythonw = sys.executable            # 開発機ではいま動いているものを使う
+    subprocess.Popen([pythonw, script], cwd=appconfig.BASE,
+                     creationflags=CREATE_NO_WINDOW)
+    return pythonw, script
+
+
 def step_restart(log: Log, backup: str, mark: bool = True) -> None:
     """常駐を起動し直す。
 
@@ -194,17 +211,12 @@ def step_restart(log: Log, backup: str, mark: bool = True) -> None:
     if mark:
         gitupdate.set_run_state('running', 'restart', 94, '起動し直しています',
                                 log.path, backup)
-    script = os.path.join(appconfig.BASE, 'pause.pyw')
-    if not os.path.exists(script):
-        log.write(f'常駐の本体が無いので起動し直しません: {script}')
+    pythonw, script = _spawn_resident()
+    if not pythonw:
+        log.write('常駐の本体が無いので起動し直しません: '
+                  + os.path.join(appconfig.BASE, 'pause.pyw'))
         return
-
-    pythonw = os.path.join(os.path.dirname(appconfig.BASE), 'runtime', 'pythonw.exe')
-    if not os.path.exists(pythonw):
-        pythonw = sys.executable            # 開発機ではいま動いているものを使う
     log.write(f'$ {pythonw} {script}')
-    subprocess.Popen([pythonw, script], cwd=appconfig.BASE,
-                     creationflags=CREATE_NO_WINDOW)
 
 
 def wait_for_exit(log: Log) -> None:
@@ -235,8 +247,14 @@ def main() -> None:
         log = Log()
     except Exception as e:
         # ログすら作れない。ここで黙って終わると「押したのに何も起きない」になる。
+        # 常駐はもう終わっているので、記録は残せなくても戻すところまではやる。
+        # ここで戻さないと、見張り役が拾うまで中断メモを書く手段そのものが消える。
         gitupdate.set_run_state('failed', 'failed', 100,
                                 f'更新の記録を残せませんでした（{e}）')
+        try:
+            _spawn_resident()
+        except OSError:
+            pass
         return
 
     backup = ''

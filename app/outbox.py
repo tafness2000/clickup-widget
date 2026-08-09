@@ -83,7 +83,9 @@ def _record_failure(base: str, entry: dict, reason: str) -> None:
             with open(path, 'w', encoding='utf-8') as f:
                 json.dump([*items, {**entry, 'reason': reason, 'failed_at': time.time()}],
                           f, indent=2, ensure_ascii=False)
-        except OSError as e:
+        except (OSError, ValueError) as e:
+            # ここで例外を上げると flush が途中で抜け、送れた分を消し込めないまま
+            # outbox.json が残る＝次の再送で同じものをもう一度送ることになる。
             appconfig.log(f'警告: 送れなかった分を {FAILED_FILE_NAME} へ書けませんでした ({e})')
 
 

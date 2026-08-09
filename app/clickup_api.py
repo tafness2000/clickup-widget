@@ -14,6 +14,11 @@ API_ROOT = 'https://api.clickup.com/api/v2'
 TIMEOUT  = 10
 FEED_LIMIT = 5
 
+# ClickUp から来る文字は、ワークスペースの誰かが書き換えられる。タスク名だけでなく、
+# リストやフォルダの名前も、メンバーの表示名も同じ。見た目を細工する制御文字と、
+# そのままでは保存できない壊れた文字は、受け取った時点で落とす。
+_plain = appconfig.plain
+
 # スペースの数だけ問い合わせるので、何本か同時に投げる。
 # 1 つずつ順に待つと、16 スペースで 30 回以上の往復になり、途中で 1 つでも
 # タイムアウト（10 秒）すると、その分まるまる待たされる。
@@ -62,10 +67,30 @@ def is_retryable(error: Exception) -> bool:
 
     トークン誤りやリスト ID 誤り (4xx) は何度送っても通らないので、貯めずにその場で知らせる。
     HTTPError は URLError の派生なので、先に判定する順序を崩さないこと。
+
+    応答を JSON として読めなかったとき（JSONDecodeError）も貯める側に入れる。
+    200 が返っているのに中身が JSON でないのは、途中の何か——社内のプロキシが挟む
+    ログイン画面など——が本文を差し替えたときに起きる。ClickUp が拒んだわけではないので、
+    しばらく置けば通る見込みがある。ここを諦める側に置くと、打った中断メモを
+    その場で捨てることになる。
     """
     if isinstance(error, urllib.error.HTTPError):
         return error.code >= 500
-    return isinstance(error, (urllib.error.URLError, TimeoutError, OSError))
+    return isinstance(error, (urllib.error.URLError, TimeoutError, OSError,
+                              json.JSONDecodeError))
+
+
+def _me(cfg: dict) -> int:
+    """自分の ID。控えていなければ、そのことを言って止まる。
+
+    None のまま問い合わせに混ぜると `assignees[]=None` という誰でもない指定になり、
+    ClickUp はエラーではなく「該当なし」を返す。つまり一覧が、警告もログも無いまま
+    ただの空になる。取れなかったと言う方が、まだ気づける。
+    """
+    user_id = cfg.get('user_id')
+    if user_id is None:
+        raise ValueError('自分が誰かを控えていません（初回設定をやり直してください）')
+    return user_id
 
 
 def fetch_user(token: str) -> dict:
@@ -91,7 +116,9 @@ def _pick_team(teams: list[dict], preferred: str | None) -> dict | None:
 
 
 def _list_entry(item: dict, path: str) -> dict:
-    return {'id': str(item.get('id', '')), 'name': item.get('name', ''), 'path': path}
+    return {'id':   str(item.get('id', '')),
+            'name': _plain(item.get('name', '')),
+            'path': _plain(path)}
 
 
 def _space_lists(cfg: dict, space: dict, on_warn=None) -> list[dict]:
@@ -165,8 +192,8 @@ def fetch_directory(cfg: dict, on_warn=None) -> dict:
         if user.get('id') is not None:
             members.append({
                 'id':    user['id'],
-                'name':  user.get('username') or user.get('email') or '',
-                'email': user.get('email') or '',
+                'name':  _plain(user.get('username') or user.get('email') or ''),
+                'email': _plain(user.get('email') or ''),
             })
 
     spaces = api_request(cfg, f"team/{seg(team['id'])}/space?archived=false").get('spaces', [])
@@ -278,11 +305,6 @@ def status_type(task: dict) -> str:
     return ((task.get('status') or {}).get('type') or '').lower()
 
 
-# 一覧にはワークスペースの誰でも自分宛てのタスクを載せられる。
-# 文字の並ぶ向きを変える制御文字は、appconfig 側でまとめて落とす。
-_plain = appconfig.plain
-
-
 def _summarize(task: dict) -> dict:
     """一覧に出す分だけに削る。
 
@@ -310,7 +332,7 @@ def _fetch_from_default_list(cfg: dict, limit: int) -> list[dict]:
         'archived': 'false',
         'subtasks': 'false',
         'order_by': 'created',
-        'assignees[]': cfg['user_id'],
+        'assignees[]': _me(cfg),
     })
     data     = api_request(cfg, f"list/{seg(cfg['list_id'])}/task?{query}")
     excluded = {str(x) for x in cfg.get('excluded_lists', [])}
@@ -333,7 +355,7 @@ def fetch_open_tasks(cfg: dict, limit: int = FEED_LIMIT) -> list[dict]:
         return _fetch_from_default_list(cfg, limit)
 
     query = urlencode({
-        'assignees[]':    cfg['user_id'],
+        'assignees[]':    _me(cfg),
         'subtasks':       'false',
         'include_closed': 'false',
         'order_by':       'created',
@@ -401,7 +423,7 @@ def fetch_wide_tasks(cfg: dict) -> tuple[list[dict], bool]:
     out: list[dict] = []
     for page in range(WIDE_MAX_PAGES):
         query = urlencode({
-            'assignees[]':    cfg['user_id'],
+            'assignees[]':    _me(cfg),
             'subtasks':       'false',
             'include_closed': 'false',
             'order_by':       'due_date',
@@ -461,23 +483,19 @@ def complete_task(cfg: dict, task_id: str, list_id: str | None = None) -> None:
                            f'（「{target}」を送りましたが「{got}」のままです）')
 
 
-def _same_local_day(a_ms: int, b_ms: int) -> bool:
-    """同じ日か。時刻は見ない。"""
-    return (datetime.fromtimestamp(a_ms / 1000).date()
-            == datetime.fromtimestamp(b_ms / 1000).date())
-
-
 def reschedule_task(cfg: dict, task_id: str, preset: str) -> int | None:
     """期限だけ差し替える。ClickUp が持つことになった期限（ミリ秒。'none' なら None）を返す。
 
     始まりの日は触らない。中断した日が消えると、後から見て「いつ止めたか」が分からなくなる。
-    完了と同じで、変わったことを応答で確かめてから返る。画面が行を書き換えるのは
-    ここが例外を投げなかったときだけなので、確かめずに返すと嘘の期限が残る。
 
-    ただし送った時刻のままにはならない。こちらは日の終わり（23:59:59）を送るが、
-    ClickUp は時刻を持たない期限をその日の 04:00 に丸めて保存する。そこで確かめるのは
-    日付だけにして、返すのは丸めたあとの値にする。送った値の方を返すと、画面の表示と
-    ClickUp の中身が食い違ったままになる。
+    送った値がそのまま入るわけではない。こちらは手元の暦での日の終わり（23:59:59）を
+    送るが、ClickUp は時刻を持たない期限を、ワークスペースに設定されたタイムゾーンで
+    その日の 04:00 に丸めて保存する。手元とワークスペースのタイムゾーンが違えば、
+    丸めた結果は手元の暦日をまたぐこともある。
+
+    そこで確かめるのは「付ける／外すの向きが合っているか」だけにする。日付まで一致を
+    求めると、正しく変わっているのに失敗と言ってしまう（海外拠点があるワークスペースや、
+    深夜の操作で起きる）。何日の分になったかは、返ってきた値をそのまま画面へ渡して見せる。
     """
     due  = due_at(datetime.now(), preset)
     want = int(due.timestamp() * 1000) if due is not None else None
@@ -485,7 +503,10 @@ def reschedule_task(cfg: dict, task_id: str, preset: str) -> int | None:
                        body={'due_date': want, 'due_date_time': False})
 
     raw = task.get('due_date')
-    got = None if raw in (None, '') else int(raw)   # 数値を文字列で返すことがある
-    if (got is None) != (want is None) or (want is not None and not _same_local_day(got, want)):
-        raise RuntimeError(f'期限が変わりませんでした（{want} を送りましたが {got} のままです）')
+    # 数値を文字列で返すことがある。小数付きで返ることもあるので float を挟む。
+    got = None if raw in (None, '') else int(float(raw))
+    if (got is None) != (want is None):
+        raise RuntimeError('期限を変えられませんでした（'
+                           f'{"外す" if want is None else "付ける"}よう送りましたが、'
+                           f'{"付いた" if got is not None else "外れた"}ままです）')
     return got

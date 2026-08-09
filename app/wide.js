@@ -82,8 +82,7 @@ function buildWideCheck(task, row) {
     e.stopPropagation();
     if (!bridge) return;
     check.disabled = true;
-    bridge.completeTask(task.id, String(task.list_id || ''), raw => {
-      const res = JSON.parse(raw);
+    pendingComplete.set(String(task.id), res => {
       if (res.ok) {
         // 手元の控えからも外す。タブを切り替えたときに戻ってこないように。
         WIDE_TASKS = WIDE_TASKS.filter(x => x.id !== task.id);
@@ -95,6 +94,7 @@ function buildWideCheck(task, row) {
         showError(res.error || '完了にできませんでした');
       }
     });
+    bridge.completeTask(String(task.id), String(task.list_id || ''));
   });
   return check;
 }
@@ -137,20 +137,30 @@ function buildWideDue(task) {
   return el;
 }
 
+// 期限の返事を、押した行へ配る（完了と同じ理由）。
+const pendingReschedule = new Map();
+
+function onTaskRescheduled(res) {
+  const done = pendingReschedule.get(String(res.id));
+  if (!done) return;
+  pendingReschedule.delete(String(res.id));
+  done(res);
+}
+
 // 期限を選んだあと。ClickUp 側が変わったのを確かめてから手元の控えを差し替える。
 // 先に画面を書き換えると、失敗したときに嘘の期限が残る。
 function applyReschedule(target, preset) {
   const { task, el } = target;
   if (!bridge) return;
   el.classList.add('busy');
-  bridge.rescheduleTask(String(task.id), preset, raw => {
+  pendingReschedule.set(String(task.id), res => {
     el.classList.remove('busy');
-    const res = JSON.parse(raw);
     if (!res.ok) { showError(res.error || '期限を変えられませんでした'); return; }
     // 元の配列は書き換えない。差し替えた新しい配列にする。
     WIDE_TASKS = WIDE_TASKS.map(x => x.id === task.id ? { ...x, due: res.due } : x);
     renderWide();     // タブの範囲から外れれば行は消える。それがタブの意味なので知らせない
   });
+  bridge.rescheduleTask(String(task.id), preset);
 }
 
 function buildWideRow(task) {

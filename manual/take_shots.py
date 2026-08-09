@@ -99,17 +99,19 @@ SETUP_LISTS = {'ok': True, 'lists': LISTS, 'suggested': LISTS[0]}
 
 
 class Stub(QObject):
-    @pyqtSlot(str, str, str, str, str, result=str)
-    def submit(self, *a): return json.dumps({'ok': True, 'queued': False})
+    # 通信を伴うものは本物と同じで戻り値を持たない（返事はシグナルで届く形なので、
+    # 写真を撮るぶんには受け取る必要がない）。
+    @pyqtSlot(str, str, str, str, str)
+    def submit(self, *a): pass
 
     @pyqtSlot(str, str)
     def toggleFavorite(self, *a): pass
 
-    @pyqtSlot(str, str, result=str)
-    def completeTask(self, *a): return json.dumps({'ok': True})
+    @pyqtSlot(str, str)
+    def completeTask(self, *a): pass
 
-    @pyqtSlot(str, str, result=str)
-    def rescheduleTask(self, *a): return json.dumps({'ok': True, 'due': None})
+    @pyqtSlot(str, str)
+    def rescheduleTask(self, *a): pass
 
     @pyqtSlot(str, bool, result=str)
     def setListExcluded(self, *a): return json.dumps({'ok': True, 'excluded': []})
@@ -144,6 +146,9 @@ class Stub(QObject):
 
     @pyqtSlot()
     def startApp(self): pass
+
+    @pyqtSlot(result=str)
+    def appFolder(self): return r'C:\Tools\ClickUpWidget'   # 説明書に載せる架空のパス
 
 
 app = QApplication(sys.argv)

@@ -231,9 +231,11 @@ def _refresh_visible(win: HideOnCloseWindow, view: QWebEngineView,
     backdrop.push(win, view, win.width(), win.height(), hide_self=True)
     win.raise_()
     win.activateWindow()
-    if context:      # 空で上書きしてメモを消さない
-        view.page().runJavaScript(
-            f'typeof refreshContext==="function" && refreshContext({json.dumps(context)})')
+    # 空の context でも呼ぶ。メモを入れ替えるためではなく、出しっぱなしの表示
+    #（「登録しました」や更新の知らせ）を打つ画面へ戻すため。
+    # 空で上書きしない配慮は向こう側（wakeUp）にある。
+    view.page().runJavaScript(
+        f'typeof wakeUp==="function" && wakeUp({json.dumps(context)})')
     cfg = load_config()
     if is_setup_complete(cfg):
         feed.refresh(cfg)      # 一覧も古くなっているので取り直す
@@ -331,10 +333,18 @@ def _connect_bridge(win: HideOnCloseWindow, view: QWebEngineView) -> tuple[Bridg
     回収されて、画面から呼んだ瞬間に落ちる。
     """
     web_bridge = Bridge(win, view)
-    web_bridge.listsReady.connect(lambda payload: view.page().runJavaScript(
-        f'typeof setupLists==="function" && setupLists({payload})'))
-    web_bridge.wideReady.connect(lambda payload: view.page().runJavaScript(
-        f'typeof setWideTasks==="function" && setWideTasks({payload})'))
+    # 通信を伴うものの返事は、すべて Bridge の側から届く（押した瞬間に返るのは
+    # 「受け付けた」だけで、中身は裏で走っている）。
+    for signal, name in (
+        (web_bridge.listsReady,      'setupLists'),
+        (web_bridge.wideReady,       'setWideTasks'),
+        (web_bridge.submitDone,      'onSubmitDone'),
+        (web_bridge.taskCompleted,   'onTaskCompleted'),
+        (web_bridge.taskRescheduled, 'onTaskRescheduled'),
+        (web_bridge.updateStarted,   'onUpdateStarted'),
+    ):
+        signal.connect(lambda payload, fn=name: view.page().runJavaScript(
+            f'typeof {fn}==="function" && {fn}({payload})'))
     channel = QWebChannel()
     channel.registerObject('bridge', web_bridge)
     view.page().setWebChannel(channel)

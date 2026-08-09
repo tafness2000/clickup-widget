@@ -6,6 +6,9 @@ const chipUpdate = document.getElementById('chipUpdate');
 
 let UPDATE = null;      // 新しい版があるときだけ入る
 
+// 「いま更新する」ボタン。始められたかの返事が後から届くので、持っておく。
+let updateGoBtn = null;
+
 // pause.pyw が確認の結果を流し込む。
 function setUpdate(status) {
   UPDATE = (status && status.state === 'available') ? status : null;
@@ -19,7 +22,7 @@ function setUpdateResult(run) {
     successText.textContent = run.message || '新しい版になりました';
     formArea.style.display = 'none';
     successArea.style.display = 'flex';
-    setTimeout(() => { formArea.style.display = ''; successArea.style.display = 'none'; }, 2400);
+    later(2400, () => { formArea.style.display = ''; successArea.style.display = 'none'; });
   } else if (run.state === 'failed') {
     showError(run.message || '更新できませんでした');
   }
@@ -59,35 +62,26 @@ function openUpdatePanel() {
   const actions = document.createElement('div');
   actions.className = 'update-actions';
 
-  const later = document.createElement('button');
-  later.type = 'button';
-  later.className = 'update-later';
-  later.textContent = 'あとで';
-  later.addEventListener('click', () => closeUpdatePanel());
+  // 名前を laterBtn にしてあるのは、ui.js の later()（遅らせて動かす方）と重ならないため。
+  const laterBtn = document.createElement('button');
+  laterBtn.type = 'button';
+  laterBtn.className = 'update-later';
+  laterBtn.textContent = 'あとで';
+  laterBtn.addEventListener('click', () => closeUpdatePanel());
 
   const go = document.createElement('button');
   go.type = 'button';
   go.className = 'update-go';
   go.textContent = 'いま更新する';
   go.addEventListener('click', () => {
+    if (!bridge) return;             // 先に確かめる。押せないまま残さない
     go.disabled = true;
     go.textContent = '更新しています…';
-    if (!bridge) return;
-    bridge.startUpdate(raw => {
-      const res = JSON.parse(raw);
-      if (res.ok) {
-        // ここから先は別のプロセスの仕事。この窓はまもなく閉じる。
-        go.textContent = '更新中です。しばらくお待ちください';
-      } else {
-        go.disabled = false;
-        go.textContent = 'いま更新する';
-        closeUpdatePanel();
-        showError(res.error || '更新できませんでした');
-      }
-    });
+    bridge.startUpdate();
   });
+  updateGoBtn = go;
 
-  actions.append(later, go);
+  actions.append(laterBtn, go);
   pickerList.appendChild(actions);
 
   state.kind = 'update';          // Esc と暗幕の扱いを候補パネルと合わせる
@@ -96,11 +90,28 @@ function openUpdatePanel() {
   pickerScrim.classList.add('open');
 }
 
+// 更新を始められたかの返事。走り出したのを見届けるのに数秒かかるので、
+// 待つのは Python の裏側でやり、結果だけがここへ届く。
+function onUpdateStarted(res) {
+  if (res.ok) {
+    // ここから先は別のプロセスの仕事。この窓はまもなく閉じる。
+    if (updateGoBtn) updateGoBtn.textContent = '更新中です。しばらくお待ちください';
+    return;
+  }
+  if (updateGoBtn) {
+    updateGoBtn.disabled = false;
+    updateGoBtn.textContent = 'いま更新する';
+  }
+  closeUpdatePanel();
+  showError(res.error || '更新できませんでした');
+}
+
 function closeUpdatePanel() {
   picker.classList.remove('open', 'update');
   pickerScrim.classList.remove('open');
   pickerList.replaceChildren();
   state.kind = null;
+  updateGoBtn = null;
   setTimeout(() => taskInput.focus(), 30);
 }
 

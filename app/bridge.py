@@ -51,12 +51,28 @@ def _http_error(e: Exception) -> str:
     return str(e)
 
 
+def _open_in_browser(url: str) -> None:
+    """既定のブラウザで開く。頼むところまでを裏でやる。
+
+    ブラウザがまだ立ち上がっていないと、ここが戻るまで数秒かかることがある。
+    GUI スレッドで待つと、その間は窓もホットキーも止まる。
+    """
+    threading.Thread(target=webbrowser.open, args=(url,), daemon=True).start()
+
+
 class Bridge(QObject):
-    # 初回設定でリスト一覧が届いたことを画面へ伝える。
-    # ワーカースレッドから emit しても、受け取りは GUI スレッド側になる。
-    listsReady = pyqtSignal(str)
-    # 広げた一覧のタスクが届いたとき。
-    wideReady  = pyqtSignal(str)
+    # 画面へ返す口。ワーカースレッドから emit しても、受け取りは GUI スレッド側になる。
+    #
+    # 通信を伴うものはすべてここを通して返す。pyqtSlot の中で待つと、その間は Qt の
+    # イベントループごと止まり、窓の描き直しもホットキーも効かなくなる（ClickUp が
+    # 応答しないときは最長 10 秒）。中断メモをすぐ取れることがこのツールの取り柄なので、
+    # 画面からの操作で待たせない。
+    listsReady      = pyqtSignal(str)   # 初回設定のリスト一覧
+    wideReady       = pyqtSignal(str)   # 広げた一覧のタスク
+    submitDone      = pyqtSignal(str)   # 登録の結果
+    taskCompleted   = pyqtSignal(str)   # 完了にした結果（どの行かは id で引き当てる）
+    taskRescheduled = pyqtSignal(str)   # 期限を送り直した結果（同上）
+    updateStarted   = pyqtSignal(str)   # 更新を始められたか
 
     def __init__(self, window, view) -> None:
         super().__init__()
@@ -64,8 +80,13 @@ class Bridge(QObject):
         self._view   = view
         # 直前に送ったもの (name, memo, list_id, assignee_id, due, 時刻)。連打をここで弾く。
         self._last_submit = None
+        # 登録が裏で走るようになったぶん、連打されると 2 本並ぶ。
+        # 上の目印を取り合わないよう、送るところは直列にする。
+        self._submit_lock = threading.Lock()
         self._wide = feeds.WideFeed()
         self._wide.loaded.connect(self.wideReady)
+        # 更新が始まったのを見届けてから引き上げる。GUI スレッドで受ける。
+        self.updateStarted.connect(self._on_update_started)
 
     # ── 登録 ──────────────────────────────────────────────────
 
@@ -80,18 +101,31 @@ class Bridge(QObject):
         *previous, when = self._last_submit
         return tuple(previous) == key and (time.monotonic() - when) < DUPLICATE_WINDOW_SEC
 
-    @pyqtSlot(str, str, str, str, str, result=str)
-    def submit(self, name: str, memo: str, list_id: str, assignee_id: str, due: str) -> str:
-        """登録の入り口。何が起きても JSON を返し切る。
+    @pyqtSlot(str, str, str, str, str)
+    def submit(self, name: str, memo: str, list_id: str, assignee_id: str, due: str) -> None:
+        """登録の入り口。送るのは裏でやり、結果は submitDone で画面へ返す。
 
-        ここから例外が外へ出ると QWebChannel はコールバックを呼ばない。画面は
-        送信中の表示のまま固まり、窓を閉じるまで打ち直せなくなる。
+        打った文字はここで均しておく。対にならないサロゲート（絵文字を途中で切って
+        貼ったときなど）が混ざっていると、送るときではなく退避するときに落ちて、
+        打ち込みごと失われる。
         """
-        try:
-            return self._submit(name, memo, list_id, assignee_id, due)
-        except Exception as e:
-            appconfig.log(f'警告: 登録の途中で想定外の失敗をしました ({e})')
-            return json.dumps({'ok': False, 'error': _http_error(e)})
+        args = (appconfig.plain(name), appconfig.plain(memo), list_id, assignee_id, due)
+        threading.Thread(target=self._submit_worker, args=args, daemon=True).start()
+
+    def _submit_worker(self, name: str, memo: str, list_id: str,
+                       assignee_id: str, due: str) -> None:
+        """裏で送る。何が起きても、返事だけは必ず画面へ返す。
+
+        返さないと画面は送信中の表示のまま固まり、窓を出し直すまで打ち直せない。
+        """
+        with self._submit_lock:
+            try:
+                payload = self._submit(name, memo, list_id, assignee_id, due)
+            except Exception as e:
+                appconfig.log(f'警告: 登録の途中で想定外の失敗をしました ({e})')
+                payload = json.dumps({'ok': False, 'error': _http_error(e)},
+                                     ensure_ascii=True)
+        self.submitDone.emit(payload)
 
     def _submit(self, name: str, memo: str, list_id: str, assignee_id: str, due: str) -> str:
         cfg = appconfig.load_config()
@@ -129,7 +163,9 @@ class Bridge(QObject):
         try:
             # 読み直してから直す。送っている間に★が押されていても巻き戻さない。
             appconfig.update_config(lambda latest: appconfig.remember_list(latest, target))
-        except OSError as e:
+        except (OSError, ValueError) as e:
+            # ValueError も受けるのは、書けない文字が混ざっていたとき（UnicodeEncodeError）。
+            # 保存できなかったという意味では同じなので、ここで止める。以下の保存も同じ。
             appconfig.log(f'警告: 設定を保存できませんでした ({e})')
 
     def _on_post_failed(self, e: Exception, cfg: dict, target: str,
@@ -145,30 +181,48 @@ class Bridge(QObject):
 
     # ── 一覧 ──────────────────────────────────────────────────
 
-    @pyqtSlot(str, str, result=str)
-    def completeTask(self, task_id: str, list_id: str) -> str:
-        """完了にする。リストごとにステータス名が違うので、どのリストの分かも受け取る。"""
+    @pyqtSlot(str, str)
+    def completeTask(self, task_id: str, list_id: str) -> None:
+        """完了にする。リストごとにステータス名が違うので、どのリストの分かも受け取る。
+
+        ステータス名を引くのに 1 往復、完了を送るのに 1 往復。ここで待つと、
+        押した瞬間から最長 20 秒ぶん画面が止まる。結果は taskCompleted で返す。
+        """
+        threading.Thread(target=self._complete_worker,
+                         args=(task_id, list_id), daemon=True).start()
+
+    def _complete_worker(self, task_id: str, list_id: str) -> None:
         try:
             clickup_api.complete_task(appconfig.load_config(), task_id, list_id or None)
+            result = {'ok': True}
         except Exception as e:
-            return json.dumps({'ok': False, 'error': _http_error(e)})
-        return json.dumps({'ok': True})
+            result = {'ok': False, 'error': _http_error(e)}
+        # どの行の返事かは id で引き当ててもらう。続けて何件も押せるため。
+        self.taskCompleted.emit(json.dumps({**result, 'id': task_id}, ensure_ascii=True))
 
-    @pyqtSlot(str, str, result=str)
-    def rescheduleTask(self, task_id: str, preset: str) -> str:
-        """一覧の 1 件だけ期限を送り直す。
+    @pyqtSlot(str, str)
+    def rescheduleTask(self, task_id: str, preset: str) -> None:
+        """一覧の 1 件だけ期限を送り直す。結果は taskRescheduled で返す。
 
         既定の期限（setDefaultDue）とは別物。こちらは「そのタスクを明日へ送る」であって、
         次から登録するものの期限は動かさない。
         """
         preset = str(preset or '').strip()
         if preset not in appconfig.DUE_PRESETS:
-            return json.dumps({'ok': False, 'error': 'その期限は選べません'})
+            self.taskRescheduled.emit(json.dumps(
+                {'ok': False, 'id': task_id, 'error': 'その期限は選べません'},
+                ensure_ascii=True))
+            return
+        threading.Thread(target=self._reschedule_worker,
+                         args=(task_id, preset), daemon=True).start()
+
+    def _reschedule_worker(self, task_id: str, preset: str) -> None:
         try:
-            due = clickup_api.reschedule_task(appconfig.load_config(), task_id, preset)
+            due    = clickup_api.reschedule_task(appconfig.load_config(), task_id, preset)
+            result = {'ok': True, 'due': due}
         except Exception as e:
-            return json.dumps({'ok': False, 'error': _http_error(e)})
-        return json.dumps({'ok': True, 'due': due})
+            result = {'ok': False, 'error': _http_error(e)}
+        self.taskRescheduled.emit(json.dumps({**result, 'id': task_id}, ensure_ascii=True))
 
     @pyqtSlot(str, bool, result=str)
     def setListExcluded(self, list_id: str, excluded: bool) -> str:
@@ -215,18 +269,32 @@ class Bridge(QObject):
 
     # ── 更新 ──────────────────────────────────────────────────
 
-    @pyqtSlot(result=str)
-    def startUpdate(self) -> str:
+    @pyqtSlot()
+    def startUpdate(self) -> None:
         """更新を始める。実際の作業は別のプロセス（updater.pyw）に任せる。
 
         自分自身のファイルを書き換えながら動くわけにいかないので、
         updater を起こしてから、こちらは窓を閉じて終わる。
+        走り出したのを見届けるのに数秒かかるので、待つのは裏でやる。
         """
+        threading.Thread(target=self._start_update_worker, daemon=True).start()
+
+    def _start_update_worker(self) -> None:
         try:
-            return self._start_update()
+            payload = self._start_update()
         except Exception as e:
             appconfig.log(f'警告: 更新を始められませんでした ({e})')
-            return json.dumps({'ok': False, 'error': str(e)})
+            payload = json.dumps({'ok': False, 'error': str(e)}, ensure_ascii=True)
+        self.updateStarted.emit(payload)
+
+    def _on_update_started(self, payload: str) -> None:
+        """走り出したなら、こちらは引き上げる。GUI スレッドで呼ばれる。"""
+        try:
+            started = bool(json.loads(payload).get('ok'))
+        except ValueError:
+            started = False
+        if started:
+            QTimer.singleShot(400, QApplication.quit)
 
     def _start_update(self) -> str:
         status = gitupdate.check_status(fetch=False)
@@ -251,12 +319,14 @@ class Bridge(QObject):
         # 走り出したことを見届けてから終わる。見届けずに終わると、
         # updater がこけていた場合に何も起きないまま常駐だけ消える。
         if not self._wait_until_started():
-            appconfig.log('警告: 更新が始まりませんでした。常駐は続けます')
-            return json.dumps({'ok': False, 'error': '更新を始められませんでした'})
+            # updater が理由を書き残していれば、それをそのまま見せる。
+            run    = gitupdate.load_status().get('lastRun') or {}
+            reason = run.get('message') or '更新を始められませんでした'
+            appconfig.log(f'警告: 更新が始まりませんでした（{reason}）。常駐は続けます')
+            return json.dumps({'ok': False, 'error': reason}, ensure_ascii=True)
 
         appconfig.log('更新を始めました。いったん終了します')
-        QTimer.singleShot(400, QApplication.quit)
-        return json.dumps({'ok': True})
+        return json.dumps({'ok': True})   # 終わるのは _on_update_started（GUI スレッド）で
 
     @staticmethod
     def _updater_python() -> str:
@@ -266,10 +336,18 @@ class Bridge(QObject):
 
     @staticmethod
     def _wait_until_started(limit: int = UPDATER_WAIT_STEPS) -> bool:
+        """updater が本当に走り出したか。
+
+        queued から動いただけでは足りない。updater は記録すら残せなかったとき、
+        何もしないまま failed を書いて引き返す。それを「走り出した」と読むと、
+        更新は何も進まないのに常駐だけ終わることになる。
+        """
         for _ in range(limit):
             time.sleep(UPDATER_WAIT_SEC)
-            run = gitupdate.load_status().get('lastRun') or {}
-            if run.get('state') and run['state'] != 'queued':
+            state = (gitupdate.load_status().get('lastRun') or {}).get('state')
+            if state == 'failed':
+                return False
+            if state and state != 'queued':
                 return True
         return False
 
@@ -327,7 +405,7 @@ class Bridge(QObject):
         何でも渡せる口を画面側に開けておく理由はないので、行き先を絞る。
         """
         if url.startswith(TASK_URL_PREFIX):
-            webbrowser.open(url)
+            _open_in_browser(url)
             return
         appconfig.log(f'警告: ClickUp のものではない URL だったので開きませんでした ({url[:60]})')
 
@@ -344,7 +422,7 @@ class Bridge(QObject):
     @pyqtSlot()
     def openTokenPage(self) -> None:
         """トークンを発行する画面をそのまま開く。利用者に探させない。"""
-        webbrowser.open(TOKEN_PAGE_URL)
+        _open_in_browser(TOKEN_PAGE_URL)
 
     @pyqtSlot(str, result=str)
     def checkToken(self, token: str) -> str:
@@ -382,7 +460,7 @@ class Bridge(QObject):
                 return
             try:
                 directory.save(appconfig.BASE, data)   # 本編でもそのまま使えるよう控えておく
-            except OSError as e:
+            except (OSError, ValueError) as e:
                 appconfig.log(f'警告: リストの控えを保存できませんでした ({e})')
 
             lists     = data.get('lists', [])
@@ -396,6 +474,18 @@ class Bridge(QObject):
 
     @pyqtSlot(str, str, bool, result=str)
     def finishSetup(self, token: str, list_id: str, autostart: bool) -> str:
+        """初回設定の入り口。submit と同じで、何が起きても JSON を返し切る。
+
+        ここから例外が外へ出ると QWebChannel はコールバックを呼ばない。
+        「はじめる」を押したまま画面が固まり、初回設定を終える手立てが無くなる。
+        """
+        try:
+            return self._finish_setup(token, list_id, autostart)
+        except Exception as e:
+            appconfig.log(f'警告: 初回設定の途中で想定外の失敗をしました ({e})')
+            return json.dumps({'ok': False, 'error': _http_error(e)}, ensure_ascii=True)
+
+    def _finish_setup(self, token: str, list_id: str, autostart: bool) -> str:
         """設定を保存し、頼まれていれば自動起動も登録する。"""
         token, list_id = token.strip(), list_id.strip()
         if not token or not list_id:
@@ -413,7 +503,7 @@ class Bridge(QObject):
         }
         try:
             appconfig.save_config(directory.fill_names(cfg, directory.load(appconfig.BASE)))
-        except OSError as e:
+        except (OSError, ValueError) as e:
             # ここで保存できないと設定そのものが残らない。先へ進ませずに伝える。
             appconfig.log(f'警告: 初回設定を保存できませんでした ({e})')
             return json.dumps({'ok': False, 'error': f'設定を保存できませんでした（{e}）'})
