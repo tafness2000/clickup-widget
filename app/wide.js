@@ -11,6 +11,9 @@ const WIDE = { open: false, scope: 'today', busy: false, newestFirst: true, quer
 // 押すたびに ClickUp へ取りにいかない（切り替えが待たされないため）。
 let WIDE_TASKS = [];
 
+// 取りに行ける分を使い切ったか。立っていれば、ここに出ているのが全部ではない。
+let WIDE_MORE = false;
+
 // タブごとの期限の範囲。null は「その側は絞らない」。
 function scopeBounds(scope) {
   const start = new Date(); start.setHours(0, 0, 0, 0);
@@ -172,10 +175,17 @@ function updateWideFoot(shown, total) {
   if (WIDE.query) {
     // 探しているときに期限で切られていると、「無い」のか「このタブに無い」のかが
     // 分からない。ほかのタブに何件あるかを言っておく。
+    // 数えられるのは手元にある分だけ。取りに行けた範囲で打ち切っているなら、
+    // 確かな件数として読まれないよう「以上」と断る。
     const hits = WIDE_TASKS.filter(t => matchesQuery(t, tokenize(WIDE.query))).length;
-    notes.push(hits > shown ? `ほかのタブに ${hits - shown} 件` : '絞り込み中');
+    notes.push(hits > shown ? `ほかのタブに ${hits - shown} 件${WIDE_MORE ? '以上' : ''}`
+                            : '絞り込み中');
   }
-  if (total !== undefined && total !== shown) notes.push(`中断中ぜんぶで ${total} 件`);
+  if (total !== undefined && total !== shown)
+    notes.push(WIDE_MORE ? `ここまでで ${total} 件` : `中断中ぜんぶで ${total} 件`);
+  // 取れる分を使い切っていた。「出ているのが全部」と読まれると、
+  // 一覧に無いタスクを「もう無い」と扱ってしまう。
+  if (WIDE_MORE) notes.push('この先はまだ見ていません');
   wideFoot.textContent = `${label}: ${shown} 件`
                        + (notes.length ? `（${notes.join(' · ')}）` : '');
 }
@@ -185,11 +195,13 @@ function setWideTasks(data) {
   WIDE.busy = false;
   if (!data.ok) {
     WIDE_TASKS = [];
+    WIDE_MORE  = false;
     wideBody.replaceChildren(note('取得できませんでした。⟳ で取り直してください'));
     wideFoot.textContent = '';
     return;
   }
   WIDE_TASKS = data.tasks || [];
+  WIDE_MORE  = !!data.more;
   renderWide();
 }
 

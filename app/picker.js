@@ -25,9 +25,9 @@ function searchLists(q) {
   const tokens = tokenize(q);
   const phrase = tokens.join(' ');
   if (!tokens.length) {
-    // 空欄のときは「★ → 最近使った → 既定 → 残り」。探す前に手が届くように。
-    // 既定を最近より下に置くのは、既定はいつでもそこにあると分かっているのに対し、
-    // 直前に使った先はもう一度使う見込みが高いため。
+    // 空欄のときは「いま選んであるもの → ★ → 最近使った → 既定 → 残り」。
+    // 探す前に手が届くように。既定を最近より下に置くのは、既定はいつでもそこにあると
+    // 分かっているのに対し、直前に使った先はもう一度使う見込みが高いため。
     const byId = new Map(DIR.lists.map(l => [String(l.id), l]));
     const head = [];
     const seen = new Set();
@@ -35,6 +35,9 @@ function searchLists(q) {
       const item = byId.get(String(id));
       if (item && !seen.has(String(id))) { head.push({ item, tag }); seen.add(String(id)); }
     };
+    // いま選んであるものは、既定と違うなら先頭に出す。数百件あると見えるところまでで
+    // 切られてしまい、開き直したときに「選んだはずのものが無い」ことになる。
+    if (String(pickedList.id) !== String(DEFAULT_LIST.id)) push(pickedList.id, 'いま');
     // ★のタグは付けない。行の右端で★ボタンが光っているので二重になる。
     FAV.lists.forEach(id => push(id, ''));
     RECENT.forEach(id => push(id, '最近'));
@@ -59,9 +62,15 @@ function searchMembers(q) {
   };
   const self = DIR.members.find(m => m.id === SELF.id) || SELF;
   if (!tokens.length) {
-    // 「自分 → ★ → 残り」。他人に振るのは★の人がほとんど、という前提。
+    // 「自分 → いま指してある相手 → ★ → 残り」。
+    // 他人に振るのは★の人がほとんど、という前提。
     const out  = [{ item: self, tag: '自分' }];
     const seen = new Set([String(self.id)]);
+    // いま指してある相手も先に出す。リストと同じ理由で、切り捨てに埋もれさせない。
+    if (!seen.has(String(pickedUser.id))) {
+      const now = DIR.members.find(m => String(m.id) === String(pickedUser.id));
+      if (now) { out.push({ item: now, tag: 'いま' }); seen.add(String(pickedUser.id)); }
+    }
     FAV.members.forEach(id => {
       const m = DIR.members.find(x => String(x.id) === String(id));
       if (m && !seen.has(String(id))) { out.push({ item: m, tag: '' }); seen.add(String(id)); }
@@ -127,25 +136,51 @@ function isOpen() { return state.kind !== null; }
 // 選ぶものが 6 つで固定のパネル。検索欄を出さず、丈も詰める。
 function isFixedList(kind) { return kind === 'due' || kind === 'reschedule'; }
 
+// 一度に組む行数。数百件を全部組むと打鍵ごとに重くなるので、見えるぶんだけに切る。
+const PICKER_MAX = 60;
+
+function searchFor(kind, q) {
+  if (kind === 'list')       return searchLists(q);
+  if (kind === 'user')       return searchMembers(q);
+  if (kind === 'exclude')    return searchExclude(q);
+  if (kind === 'reschedule') return searchReschedule();
+  return searchDue();
+}
+
+// 開き直したとき、いま選んでいるものに合わせておく（毎回先頭に戻さない）。
+// 探すのは切り詰めたあとの並びから。切る前の位置で決めてはいけない。
+// 61 件目より後ろに選んであるものがあると、setActive がその位置を末尾へ丸めるので、
+// 選んだ覚えのない行が光ったまま Enter を押せてしまう（リストが 177 件あれば普通に起きる）。
+//
+// 当たるものが無いときは、どこも光らせない（-1）。
+//   ・出さないリスト  … そもそも「選んであるもの」という概念が無い
+//   ・期限ずらし      … いまの期限が 6 つのどれでもないことがある（「3 日後」など）
+//   ・切り捨てた先    … 見えていない行は選べない
+// ここで先頭を光らせると「今日が選んである」ように見えて、Enter を押した拍子に
+// その期限へ動いてしまう。出さないリストなら、そのリストが一覧から外れてしまう。
+function activeIndex(rows) {
+  if (state.kind === 'exclude') return -1;
+  const found = rows.findIndex(r => r.item.id === currentPick().id);
+  if (found >= 0) return found;
+  return isFixedList(state.kind) ? -1 : 0;
+}
+
+// 切り捨てたぶんがあることは言っておく。黙って止めると、出てこないリストを
+// 「もう無い」と読まれる（外したいリストを探しているときに行き止まりになる）。
+function moreNote(hidden) {
+  const el = document.createElement('div');
+  el.className = 'pick-more';
+  el.textContent = `ほかに ${hidden} 件あります。絞り込んでください`;
+  return el;
+}
+
 function renderPicker() {
-  const q = pickerSearch.value;
+  const q      = pickerSearch.value;
   const tokens = isFixedList(state.kind) ? [] : tokenize(q);
-  state.rows = state.kind === 'list'       ? searchLists(q)
-             : state.kind === 'user'       ? searchMembers(q)
-             : state.kind === 'exclude'    ? searchExclude(q)
-             : state.kind === 'reschedule' ? searchReschedule()
-             : searchDue();
-  // 開き直したとき、いま選んでいるものに合わせておく（毎回先頭に戻さない）。
-  //
-  // 当たるものが無いときは、どこも光らせない（-1）。
-  //   ・出さないリスト  … そもそも「選んであるもの」という概念が無い
-  //   ・期限ずらし      … いまの期限が 6 つのどれでもないことがある（「3 日後」など）
-  // ここで先頭を光らせると「今日が選んである」ように見えて、Enter を押した拍子に
-  // その期限へ動いてしまう。出さないリストなら、そのリストが一覧から外れてしまう。
-  const found = state.rows.findIndex(r => r.item.id === currentPick().id);
-  state.active = state.kind === 'exclude' ? -1
-               : found >= 0               ? found
-               : isFixedList(state.kind)  ? -1 : 0;
+  const all    = searchFor(state.kind, q);
+
+  state.rows   = all.slice(0, PICKER_MAX);
+  state.active = activeIndex(state.rows);
 
   pickerNote.textContent = state.kind === 'exclude'
     ? 'チェックを外したリストは、この一覧にも「最近登録したタスク」にも出なくなります'
@@ -161,9 +196,9 @@ function renderPicker() {
     return;
   }
 
-  // 200 件を全部組むと打鍵ごとに重くなるので、見えるぶんだけに切る。
-  state.rows = state.rows.slice(0, 60);
   state.rows.forEach((row, index) => pickerList.appendChild(buildPickerRow(row, index, tokens)));
+  if (all.length > state.rows.length)
+    pickerList.appendChild(moreNote(all.length - state.rows.length));
   // 選んであるところまで送る。-1（どこも光らせない）のときは触らない。
   if (state.active > 0) setActive(state.active);
 }
@@ -310,9 +345,11 @@ function buildPickerRow(row, index, tokens) {
 }
 
 function setActive(index) {
+  // 端は行の数で決める。並んでいる要素の数で決めると、末尾の断り書き
+  //（「ほかに N 件あります」）や「見つかりません」まで矢印で行けてしまう。
+  if (!state.rows.length) return;
   const els = pickerList.children;
-  if (!els.length) return;
-  state.active = Math.max(0, Math.min(index, els.length - 1));
+  state.active = Math.max(0, Math.min(index, state.rows.length - 1));
   for (let i = 0; i < els.length; i++) els[i].classList.toggle('active', i === state.active);
   els[state.active].scrollIntoView({ block: 'nearest' });
 }

@@ -230,9 +230,9 @@ class Bridge(QObject):
 
     def _start_update(self) -> str:
         status = gitupdate.check_status(fetch=False)
-        if status['state'] not in ('available', 'blocked'):
-            return json.dumps({'ok': False, 'error': status['message']})
-        if status['state'] == 'blocked':
+        # blocked（手を入れたファイルがある）も断る。断る理由は message に入っているので、
+        # 取り込める available 以外は同じ返し方でよい。
+        if status['state'] != 'available':
             return json.dumps({'ok': False, 'error': status['message']})
 
         script = os.path.join(appconfig.BASE, 'updater.pyw')

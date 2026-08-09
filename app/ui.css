@@ -314,6 +314,14 @@ input.task:focus, textarea.memo:focus {
 }
 .pick-empty { font-size: 11px; color: var(--text-dim); padding: 6px 7px; }
 
+/* 切り捨てたぶんの断り書き。候補の行と読み違えないよう、線で区切って薄く出す。 */
+.pick-more {
+  font-size: 10px; color: var(--text-dim);
+  padding: 6px 7px;
+  margin-top: 4px;
+  border-top: 1px solid var(--border);
+}
+
 /* エラーはヒントと同じ行に出す。専用の行を空けておくと、その分ずっと隙間が残るため。 */
 .error {
   font-size: 11px;

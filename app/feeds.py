@@ -49,7 +49,7 @@ class WideFeed(QObject):
 
     def _fetch(self, cfg: dict, generation: int) -> None:
         try:
-            tasks = clickup_api.fetch_wide_tasks(cfg)
+            tasks, more = clickup_api.fetch_wide_tasks(cfg)
         except Exception as e:
             appconfig.log(f'警告: 広げた一覧を取得できませんでした ({e})')
             if generation == self._generation:
@@ -57,8 +57,13 @@ class WideFeed(QObject):
             return
         if generation != self._generation:
             return                      # もっと新しい依頼が出ている。これは捨てる
-        appconfig.log(f'広げた一覧: 中断中 {len(tasks)} 件')
-        self.loaded.emit(json.dumps({'ok': True, 'tasks': tasks}, ensure_ascii=True))
+        # 打ち切ったならログにも残す。画面の断り書きは見た人しか気づけないが、
+        # ここに続けて出ていれば「上限が足りていない」と後から分かる。
+        appconfig.log(f'広げた一覧: 中断中 {len(tasks)} 件'
+                      + ('（見に行ける分を使い切りました。まだ先にあるかもしれません）'
+                         if more else ''))
+        self.loaded.emit(json.dumps({'ok': True, 'tasks': tasks, 'more': more},
+                                    ensure_ascii=True))
 
 
 class DirectoryFeed(QObject):
@@ -111,7 +116,9 @@ class UpdateFeed(QObject):
     def _fetch(self) -> None:
         try:
             status = gitupdate.check_status()
-            gitupdate.save_status({**gitupdate.load_status(), **status})
+            # 触るのは「新しい版があるか」だけ。updater が書いている lastRun は
+            # こちらの都合で消さない（進み具合を見失うと、更新が始まったかが分からなくなる）。
+            gitupdate.merge_status(status)
             if status['state'] == 'available':
                 status['changes'] = gitupdate.changes_summary()
                 appconfig.log(f"更新があります（{status['behind']} 件 / "

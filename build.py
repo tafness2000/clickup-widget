@@ -412,6 +412,18 @@ def verify_layout() -> None:
     print(f'\n展開時のサイズ: {total / 1024 / 1024:.1f} MB')
 
 
+def _powershell() -> str:
+    """PowerShell の場所。
+
+    名前だけで渡すと、Windows は PATH より先に「いまの作業フォルダ」を探す。
+    ビルドを回す場所に powershell.exe を置ける相手がいれば、そちらが動いてしまう。
+    app/startup.py の _powershell_path と同じ理由で、ここも場所を決め打つ。
+    """
+    root = Path(os.environ.get('SystemRoot') or r'C:\Windows')
+    full = root / 'System32' / 'WindowsPowerShell' / 'v1.0' / 'powershell.exe'
+    return str(full) if full.exists() else 'powershell'
+
+
 def check_signatures() -> None:
     """同梱する exe が全部署名済みか確かめる。1 つでも欠けると SAC で止まる。"""
     exes = [str(p) for p in DIST_DIR.rglob('*.exe')]
@@ -420,7 +432,7 @@ def check_signatures() -> None:
     script = ('$ErrorActionPreference="SilentlyContinue"; '
               '$input | ForEach-Object { $s = Get-AuthenticodeSignature $_; '
               '"$($s.Status)`t$_" }')
-    done = subprocess.run(['powershell', '-NoProfile', '-Command', script],
+    done = subprocess.run([_powershell(), '-NoProfile', '-Command', script],
                           input='\n'.join(exes), capture_output=True, text=True)
     bad = [line for line in done.stdout.splitlines() if line and not line.startswith('Valid')]
     print('\n実行ファイルの署名:')

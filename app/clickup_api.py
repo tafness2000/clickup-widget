@@ -29,9 +29,6 @@ FETCH_WORKERS = 8
 # また出てくる（ClickUp が閉じたと見なすのは closed 型だけ）。
 COMPLETION_TYPES = ('closed', 'done')
 
-# 一覧から外す型。上と同じ理由で closed だけ。done 型まで外すと工程中のタスクが消える。
-CLOSED_TYPE = 'closed'
-
 # 一覧に出すメモは 1 行目だけ、しかもこの長さまで。
 MEMO_MAX = 80
 
@@ -304,15 +301,20 @@ def _summarize(task: dict) -> dict:
 
 
 def _fetch_from_default_list(cfg: dict, limit: int) -> list[dict]:
-    """ワークスペース ID がまだ分からないとき用。既定リストだけを見る。"""
+    """ワークスペース ID がまだ分からないとき用。既定リストだけを見る。
+
+    選別はリストを跨いで集めるときと同じ（is_memo）にする。ここだけ緩めると、
+    設定した直後の一覧にだけ工程のタスクや、出さないことにしたリストの分が混ざる。
+    """
     query = urlencode({
         'archived': 'false',
         'subtasks': 'false',
         'order_by': 'created',
         'assignees[]': cfg['user_id'],
     })
-    data  = api_request(cfg, f"list/{seg(cfg['list_id'])}/task?{query}")
-    tasks = [t for t in data.get('tasks', []) if status_type(t) != CLOSED_TYPE]
+    data     = api_request(cfg, f"list/{seg(cfg['list_id'])}/task?{query}")
+    excluded = {str(x) for x in cfg.get('excluded_lists', [])}
+    tasks    = [t for t in data.get('tasks', []) if is_memo(t, excluded)]
     return [_summarize_wide(t) for t in tasks[:limit]]
 
 
@@ -347,7 +349,8 @@ _status_cache: dict[str, str] = {}
 
 
 # 広げた一覧のために、リストを跨いで取ってくるときの上限。
-# 1 ページ 100 件。これ以上ある人は、そもそも一覧で見るものではない。
+# 1 ページ 100 件。ここで打ち切ったかどうかは呼び出し側へ返す（黙って捨てない）。
+# ログに「まだ先にあるかもしれません」が続けて出るようなら、この数を増やす。
 WIDE_MAX_PAGES = 3
 WIDE_PAGE_SIZE = 100
 
@@ -376,15 +379,23 @@ def _summarize_wide(task: dict) -> dict:
     }
 
 
-def fetch_wide_tasks(cfg: dict) -> list[dict]:
+def fetch_wide_tasks(cfg: dict) -> tuple[list[dict], bool]:
     """自分の担当で未完了のものを、リストを跨いで集める。
+
+    (集めたもの, まだ先がありそうか) を返す。
+
+    中断メモかどうかの選別（is_memo）は手元でやる。ClickUp に「open 型だけ」と
+    頼む手立てが無いため（ステータス名はリストごとに違う）。つまり取ってきた
+    WIDE_MAX_PAGES ぶんの中に工程のタスクが詰まっていると、その裏の中断メモは
+    ここへ出てこない。黙って捨てると「一覧に出ないタスクがある」としか見えないので、
+    打ち切ったかどうかを一緒に返して画面とログの両方で言う。
 
     期限での絞り込みと並べ替えは画面側でやる。一度取っておけばタブを切り替えても
     通信し直さずに済み、押した瞬間に入れ替わる。
     """
     team = str(cfg.get('team_id') or '')
     if not team:
-        return []
+        return [], False
     excluded = {str(x) for x in cfg.get('excluded_lists', [])}
 
     out: list[dict] = []
@@ -400,8 +411,8 @@ def fetch_wide_tasks(cfg: dict) -> list[dict]:
         batch = data.get('tasks', [])
         out.extend(_summarize_wide(t) for t in batch if is_memo(t, excluded))
         if data.get('last_page') or len(batch) < WIDE_PAGE_SIZE:
-            break
-    return out
+            return out, False        # 終わりまで見た
+    return out, True                 # 頁を使い切った＝この先にもまだ並んでいる
 
 
 def closed_status_name(cfg: dict, list_id: str | None = None) -> str:

@@ -19,6 +19,7 @@
     ・管理者権限を要る操作
 利用者が手を入れたファイルがあるときは、触らずに止める。
 """
+import ctypes
 import os
 import shutil
 import subprocess
@@ -52,6 +53,26 @@ CREATE_NO_WINDOW = 0x08000000
 # 常駐が終わるのを待つ上限。これを過ぎたら諦める（掴んだままのファイルを
 # 書き換えると壊れるので、待てないなら何もしない方がよい）。
 WAIT_EXIT_SEC = 20
+
+_kernel32 = ctypes.WinDLL('kernel32', use_last_error=True)
+ERROR_ALREADY_EXISTS = 183
+
+# 常駐が生きているかを見分ける印（pause.pyw が持つもの）。
+SINGLETON_MUTEX = 'Local\\ClickUpPauseSingleton'
+
+# 更新の最中であることを示す印。見張り役（watchdog.ps1）はこれがある間、
+# 常駐を起こし直さない。プロセス名やコマンドラインで見分ける手もあるが、
+# それだと同じ名前を名乗るだけで見張り役を止められてしまう。
+# こちらは Windows が持つ印なので、名乗るだけでは作れない。
+UPDATING_MUTEX = 'Local\\ClickUpPauseUpdating'
+
+
+def _mark_updating():
+    """更新中の印を立てる。返ってきたものは持ち続けること（手放すと印が消える）。
+
+    途中で落ちても、プロセスが終われば Windows が片付けるので残らない。
+    """
+    return _kernel32.CreateMutexW(None, False, UPDATING_MUTEX)
 
 
 class Failed(Exception):
@@ -195,12 +216,10 @@ def wait_for_exit(log: Log) -> None:
     if os.path.normcase(appconfig.BASE) != os.path.normcase(_HERE):
         return
 
-    import ctypes
-    kernel32 = ctypes.WinDLL('kernel32', use_last_error=True)
     for _ in range(WAIT_EXIT_SEC * 2):
-        handle = kernel32.CreateMutexW(None, False, 'Local\\ClickUpPauseSingleton')
-        already = ctypes.get_last_error() == 183      # ERROR_ALREADY_EXISTS
-        kernel32.CloseHandle(handle)
+        handle  = _kernel32.CreateMutexW(None, False, SINGLETON_MUTEX)
+        already = ctypes.get_last_error() == ERROR_ALREADY_EXISTS
+        _kernel32.CloseHandle(handle)
         if not already:
             return
         time.sleep(0.5)
@@ -208,6 +227,10 @@ def wait_for_exit(log: Log) -> None:
 
 
 def main() -> None:
+    # 見張り役に「いま触らないで」と知らせる印。この変数を持っている間だけ立つ。
+    # 手放すのは Windows に任せる（このプロセスが終わるとき）。
+    updating = _mark_updating()          # noqa: F841  持っていること自体が仕事
+
     try:
         log = Log()
     except Exception as e:

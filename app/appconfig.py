@@ -175,7 +175,9 @@ def save_config(cfg: dict) -> None:
     半端な JSON が残り、次の起動で .broken へ退避されてトークンごと消える。
     """
     with _config_lock:
-        temporary = CONFIG_PATH + '.writing'
+        # 書きかけの名前はプロセスごとに分ける。このロックが効くのは 1 つのプロセスの中だけで、
+        # 更新の前後は古い常駐と新しい常駐が短い間だけ並んで動くことがあるため。
+        temporary = f'{CONFIG_PATH}.{os.getpid()}.writing'
         with open(temporary, 'w', encoding='utf-8') as f:
             json.dump(_seal(cfg), f, indent=2, ensure_ascii=False)
 

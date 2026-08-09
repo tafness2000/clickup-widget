@@ -5,6 +5,7 @@ import os
 import re
 import sys
 import threading
+import time
 import traceback
 
 # GPU (Direct3D) 描画を回避してソフトウェアレンダリングに固定する。
@@ -52,6 +53,11 @@ UPDATE_CHECK_DELAY_MS = 3000
 
 # 置き場所が変わっていないかを見るまでの間。PowerShell を呼ぶので窓より後に回す。
 REALIGN_DELAY_MS = 1500
+
+# 表示プロセスが落ちたときに読み込み直す回数の上限。続けざまに落ちるなら
+# 読み直しても同じことなので、そこで諦める（落ちる → 読み直す、を延々繰り返さない）。
+RENDER_RELOAD_MAX     = 3
+RENDER_RELOAD_RESET_S = 60      # これだけ間が空いていれば、落ち着いたものとして数え直す
 
 HOTKEY_ID = 1
 MOD_CTRL  = 0x0002
@@ -293,9 +299,24 @@ def _build_window() -> tuple[HideOnCloseWindow, QWebEngineView, bool]:
     view.page().setBackgroundColor(QColor('#141416'))
     win.setCentralWidget(view)
 
+    crashes, last_crash = 0, 0.0
+
     def _on_render_terminated(status, exit_code: int) -> None:
-        """表示プロセスが落ちたら読み込み直す。放っておくと中身が空のまま残るため。"""
-        log(f'警告: 表示プロセスが落ちました (status={status}, exit={exit_code})。読み込み直します')
+        """表示プロセスが落ちたら読み込み直す。放っておくと中身が空のまま残るため。
+
+        ただし何度も続くなら読み直しても同じなので諦める。読み直すたびに落ちる
+        状態（GPU 周りの不調など）だと、そのまま CPU を食い続けることになる。
+        """
+        nonlocal crashes, last_crash
+        now     = time.monotonic()
+        crashes = crashes + 1 if now - last_crash < RENDER_RELOAD_RESET_S else 1
+        last_crash = now
+        if crashes > RENDER_RELOAD_MAX:
+            log('警告: 表示プロセスが続けて落ちるため、読み込み直しをやめます'
+                '（いったん終了して立ち上げ直してください）')
+            return
+        log(f'警告: 表示プロセスが落ちました (status={status}, exit={exit_code})。'
+            f'読み込み直します（{crashes}/{RENDER_RELOAD_MAX}）')
         view.load(QUrl.fromLocalFile(bundled(
             'setup.html' if not is_setup_complete(load_config()) else 'ui.html')))
 
@@ -352,7 +373,7 @@ def _report_last_update(view: QWebEngineView) -> None:
     view.page().runJavaScript(
         'typeof setUpdateResult==="function" && setUpdateResult('
         + json.dumps(run, ensure_ascii=True) + ')')
-    gitupdate.save_status({k: v for k, v in status.items() if k != 'lastRun'})
+    gitupdate.merge_status({}, drop=('lastRun',))
 
 
 def _on_page_ready(view: QWebEngineView, directory_feed: feeds.DirectoryFeed) -> None:

@@ -13,6 +13,7 @@ import json
 import os
 import shutil
 import subprocess
+import threading
 import time
 
 import appconfig
@@ -190,15 +191,40 @@ def load_status() -> dict:
 
 
 def save_status(data: dict) -> None:
-    """状態を書く。書けなくても更新そのものは進めたいので、失敗は握る。"""
+    """状態を丸ごと書く。書けなくても更新そのものは進めたいので、失敗は握る。
+
+    外から呼ぶときは merge_status を使うこと。ここを直に呼ぶと、
+    もう一方のプロセスが書いた分ごと置き換えてしまう。
+    """
     try:
         os.makedirs(appconfig.BASE, exist_ok=True)
-        temporary = status_path() + '.writing'
+        # 書きかけの名前はプロセスごとに分ける。常駐と updater が同じ名前を使うと、
+        # 両方が同じファイルへ書いたうえで置き換え合い、混ざったものが残りうる。
+        temporary = f'{status_path()}.{os.getpid()}.writing'
         with open(temporary, 'w', encoding='utf-8') as f:
             json.dump(data, f, indent=2, ensure_ascii=False)
         os.replace(temporary, status_path())
     except OSError as e:
         appconfig.log(f'警告: 更新の状態を保存できませんでした ({e})')
+
+
+# このファイルは 2 つのプロセスが書く。常駐が書くのは「新しい版があるか」、
+# updater が書くのは「どこまで進んだか（lastRun）」で、触るキーは互いに別。
+# それでも「読む → 手を加える → 書く」を各自の都合で長く挟むと、その間に
+# 相手が書いた分を古い値で戻してしまう。読むのは書く直前だけにして窓を詰める。
+# 同じプロセスの中のスレッド同士は、このロックで直列になる。
+_status_lock = threading.Lock()
+
+
+def merge_status(patch: dict, drop: tuple = ()) -> None:
+    """いまの状態に patch を重ねて書く。drop に挙げたキーは落とす。
+
+    丸ごと書き換えないのは、書き手が 2 つあるため。片方の都合で
+    もう片方の書いたものを消さない。
+    """
+    with _status_lock:
+        kept = {k: v for k, v in load_status().items() if k not in drop}
+        save_status({**kept, **patch})
 
 
 def set_run_state(state: str, step: str, progress: int, message: str,
@@ -208,10 +234,8 @@ def set_run_state(state: str, step: str, progress: int, message: str,
     画面は 1〜3 秒ごとにこれを読む。ここが進まないまま止まっていたら、
     更新が始まっていないということ。
     """
-    current = load_status()
-    current['lastRun'] = {
+    merge_status({'lastRun': {
         'state': state, 'currentStep': step, 'progress': progress,
         'message': message, 'logPath': log_path, 'backupPath': backup_path,
         'at': time.strftime('%Y-%m-%dT%H:%M:%S'),
-    }
-    save_status(current)
+    }})

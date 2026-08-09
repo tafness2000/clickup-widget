@@ -21,9 +21,13 @@ __pycache__/
 # ── 利用者ごとのデータ。絶対に入れないこと ──
 # config.json には ClickUp の接続情報が入る（このパソコンでしか読めない形だが、
 # それでも他人のリポジトリへ流す理由がない）。
+#
+# 「.json.*」まで外すのは、書き換えの途中でできる控え（.<pid>.writing / .<pid>.tmp）を
+# 拾わないため。中身は本体と同じなので、同じ理由で入れてはいけない。
 app/config.json
 app/config.json.*
 app/directory.json
+app/directory.json.*
 app/outbox.json
 app/outbox_failed.json
 app/*.log
@@ -31,6 +35,7 @@ app/*.log.1
 
 # 更新のときにできるもの
 app/update-status.json
+app/update-status.json.*
 app/update-log/
 app/backup/
 
@@ -38,6 +43,7 @@ app/backup/
 /config.json
 /config.json.*
 /directory.json
+/directory.json.*
 /outbox.json
 /outbox_failed.json
 /*.log

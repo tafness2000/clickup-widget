@@ -37,8 +37,10 @@ def save(base: str, data: dict) -> None:
     取り直しは裏のスレッドが 1 日 1 回やるので、読み手（既定の入れ替えなど）と
     重なる瞬間が必ずある。
     """
-    path      = _path(base)
-    temporary = path + '.tmp'
+    path = _path(base)
+    # 書きかけの名前はプロセスごとに分ける。同じ名前だと、2 つのプロセスが並んで
+    # 動いている間（更新の前後など）に、互いの書きかけを置き換え合うことになる。
+    temporary = f'{path}.{os.getpid()}.tmp'
     with open(temporary, 'w', encoding='utf-8') as f:
         json.dump(data, f, indent=2, ensure_ascii=False)
     os.replace(temporary, path)
