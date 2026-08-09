@@ -48,7 +48,9 @@ pythonw app\pause.pyw
 
 # 確かめる（数秒で終わる。ClickUp にはつながない）
 py tests\check_wide.py       # 一覧の打ち切りと、載せるものの選別
+py tests\check_wait.py       # 更新が走り出したかの見分け
 node tests\check_picker.js   # 候補パネルで、どの行が光るか
+node tests\check_wakeup.js   # 出しっぱなしの窓を呼び戻したとき
 
 # 説明書の画面写真を撮り直す
 python manual\take_shots.py
