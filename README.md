@@ -37,6 +37,7 @@
 ```
 app/                本体。ここが配布物の app/ にそのまま入る
 manual/             取扱説明書のもと（template.html + 画面写真）
+tests/              画面も通信も使わずに確かめるぶん
 build.py            配布物の組み立て
 設定を解除するとき/  自動起動を外すための .bat
 ```
@@ -44,6 +45,10 @@ build.py            配布物の組み立て
 ```powershell
 # 動かす
 pythonw app\pause.pyw
+
+# 確かめる（数秒で終わる。ClickUp にはつながない）
+py tests\check_wide.py       # 一覧の打ち切りと、載せるものの選別
+node tests\check_picker.js   # 候補パネルで、どの行が光るか
 
 # 説明書の画面写真を撮り直す
 python manual\take_shots.py
