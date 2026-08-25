@@ -60,6 +60,18 @@ def _open_in_browser(url: str) -> None:
     threading.Thread(target=webbrowser.open, args=(url,), daemon=True).start()
 
 
+def _submit_key(name: str, memo: str, list_id: str, assignees: list, due: str) -> tuple:
+    """連打よけの鍵。
+
+    担当者は build_task_payload が実際に組んだ並び（parse_assignees が昇順に均したもの）を
+    そのまま使う。画面から来た押し順で組むと、同じ顔ぶれでも順が違うだけで別物になる。
+
+    メモも鍵に入れる。同じ題で中身だけ書き換えて 2 件目を入れるのは、事故ではなく
+    よくある使い方なので弾いてはいけない。
+    """
+    return (name, memo, list_id, ','.join(str(x) for x in assignees), str(due or ''))
+
+
 class Bridge(QObject):
     # 画面へ返す口。ワーカースレッドから emit しても、受け取りは GUI スレッド側になる。
     #
@@ -78,7 +90,7 @@ class Bridge(QObject):
         super().__init__()
         self._window = window
         self._view   = view
-        # 直前に送ったもの (name, memo, list_id, assignee_id, due, 時刻)。連打をここで弾く。
+        # 直前に送ったもの (name, memo, list_id, 担当者の並び, due, 時刻)。連打をここで弾く。
         self._last_submit = None
         # 登録が裏で走るようになったぶん、連打されると 2 本並ぶ。
         # 上の目印を取り合わないよう、送るところは直列にする。
@@ -102,32 +114,35 @@ class Bridge(QObject):
         return tuple(previous) == key and (time.monotonic() - when) < DUPLICATE_WINDOW_SEC
 
     @pyqtSlot(str, str, str, str, str)
-    def submit(self, name: str, memo: str, list_id: str, assignee_id: str, due: str) -> None:
+    def submit(self, name: str, memo: str, list_id: str, assignee_ids: str, due: str) -> None:
         """登録の入り口。送るのは裏でやり、結果は submitDone で画面へ返す。
+
+        担当者は何人でも選べるので、id をカンマで繋いだ 1 本の文字列で受ける
+        （QWebChannel の口に配列は渡せない）。均すのは clickup_api.parse_assignees。
 
         打った文字はここで均しておく。対にならないサロゲート（絵文字を途中で切って
         貼ったときなど）が混ざっていると、送るときではなく退避するときに落ちて、
         打ち込みごと失われる。
         """
-        args = (appconfig.plain(name), appconfig.plain(memo), list_id, assignee_id, due)
+        args = (appconfig.plain(name), appconfig.plain(memo), list_id, assignee_ids, due)
         threading.Thread(target=self._submit_worker, args=args, daemon=True).start()
 
     def _submit_worker(self, name: str, memo: str, list_id: str,
-                       assignee_id: str, due: str) -> None:
+                       assignee_ids: str, due: str) -> None:
         """裏で送る。何が起きても、返事だけは必ず画面へ返す。
 
         返さないと画面は送信中の表示のまま固まり、窓を出し直すまで打ち直せない。
         """
         with self._submit_lock:
             try:
-                payload = self._submit(name, memo, list_id, assignee_id, due)
+                payload = self._submit(name, memo, list_id, assignee_ids, due)
             except Exception as e:
                 appconfig.log(f'警告: 登録の途中で想定外の失敗をしました ({e})')
                 payload = json.dumps({'ok': False, 'error': _http_error(e)},
                                      ensure_ascii=True)
         self.submitDone.emit(payload)
 
-    def _submit(self, name: str, memo: str, list_id: str, assignee_id: str, due: str) -> str:
+    def _submit(self, name: str, memo: str, list_id: str, assignee_ids: str, due: str) -> str:
         cfg = appconfig.load_config()
         if not cfg.get('user_id'):
             user = clickup_api.fetch_user(cfg['api_token'])
@@ -135,23 +150,31 @@ class Bridge(QObject):
                 lambda latest: {**latest, 'user_id': user['id'], 'user_name': user['name']})
         target  = str(list_id or cfg['list_id'])
         payload = clickup_api.build_task_payload(cfg, name, memo, datetime.now(),
-                                                 assignee_id, due)
+                                                 assignee_ids, due)
+        # 自分が担当から外れているか。一覧は自分の担当ぶんだけを取ってくるので、
+        # このまま送ると手元のどこにも出てこない。画面でそれを言うために返す。
+        #
+        # 判じるのはここ。落とし方——数でないものを捨てる、誰も居なければ自分——を
+        # 知っているのは parse_assignees なので、その結果を見るのが確かめになる。
+        # 画面側で数えると、落とされたぶんのずれに気づけない。
+        away = int(cfg['user_id']) not in payload['assignees']
 
-        # メモも鍵に入れる。同じ題で中身だけ書き換えて 2 件目を入れるのは、
-        # 事故ではなくよくある使い方なので弾いてはいけない。
-        key = (name, memo, target, str(assignee_id or ''), str(due or ''))
+        key = _submit_key(name, memo, target, payload['assignees'], due)
         if self._is_repeat(key):
             appconfig.log('同じ内容が続けて届いたため、2 件目は送りませんでした')
-            return json.dumps({'ok': True, 'queued': False, 'duplicate': True})
+            return json.dumps({'ok': True, 'queued': False, 'duplicate': True, 'away': away})
 
         try:
             clickup_api.post_task(cfg, payload, target)
         except Exception as e:
-            return self._on_post_failed(e, cfg, target, payload, key)
+            return self._on_post_failed(e, cfg, target, payload, key, away)
 
         self._remember(cfg, target, key)
+        if away:
+            # 誰に振ったかは書かない。ログは平文で手元に残るので、名前も id も載せない。
+            appconfig.log(f"自分以外の {len(payload['assignees'])} 人に振りました")
         feeds.flush_outbox_async(cfg)   # 送れたなら接続は戻っている。溜まっている分も片付ける
-        return json.dumps({'ok': True, 'queued': False})
+        return json.dumps({'ok': True, 'queued': False, 'away': away})
 
     def _remember(self, cfg: dict, target: str, key: tuple) -> None:
         """送れた（または預かった）ことを覚える。
@@ -169,7 +192,7 @@ class Bridge(QObject):
             appconfig.log(f'警告: 設定を保存できませんでした ({e})')
 
     def _on_post_failed(self, e: Exception, cfg: dict, target: str,
-                        payload: dict, key: tuple) -> str:
+                        payload: dict, key: tuple, away: bool = False) -> str:
         if not clickup_api.is_retryable(e):
             return json.dumps({'ok': False, 'error': _http_error(e)})
         # 登録先も一緒に預ける。後日つながったとき同じリストへ送るため。
@@ -177,7 +200,7 @@ class Bridge(QObject):
         count = outbox.enqueue(appconfig.BASE, target, payload)
         appconfig.log(f'接続できないため退避しました（未送信 {count} 件）')
         self._remember(cfg, target, key)
-        return json.dumps({'ok': True, 'queued': True})
+        return json.dumps({'ok': True, 'queued': True, 'away': away})
 
     # ── 一覧 ──────────────────────────────────────────────────
 

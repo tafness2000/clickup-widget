@@ -139,6 +139,18 @@ input.task:focus, textarea.memo:focus {
 .chip-user { flex: 0 1 auto; min-width: 56px; max-width: 40%; }
 .chip-due  { flex: 0 0 auto; }
 
+/* 自分が担当から外れているとき。一覧は自分が担当のぶんだけを取ってくるので、
+   このまま登録すると手元のどこにも出てこない。それを押す前に言う。
+
+   .changed（既定と違う）とは別の話なので、地の色は潰さず枠だけで言う。
+   琥珀は更新の知らせで既に「気に留める色」として使っている。
+   border-width ではなく box-shadow で太らせるのは、チップの高さを動かさないため
+   （.targets が height: 30px で固定してあり、枠が太ると行ごとずれる）。 */
+.chip-user.away {
+  border-color: #FBBF24;
+  box-shadow: 0 0 0 2px rgba(251, 191, 36, 0.30);
+}
+
 /* 更新のお知らせ。新しい版があるときだけ出す。
    右端に寄せるのは、登録先を選ぶ 3 つと役目が違うため（押すと窓が閉じる）。 */
 .chip-update {
@@ -499,6 +511,13 @@ body.wide #wideArea {
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
   max-width: 100%;
 }
+/* 期限の下に出す担当者。行の高さは 3 段ある .wide-main が決めるので、
+   ここが増えても行は伸びない。 */
+.wide-who {
+  font-size: 9px; color: var(--text-dim);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  max-width: 100%;
+}
 /* メモ付き 3 件ぶん。窓の高さもこれに合わせて固定してある。 */
 .feed-body {
   display: flex;
@@ -676,3 +695,30 @@ button.wide-due.busy { opacity: 0.45; cursor: default; }
 /* 外してあるリストは、名前でも分かるようにする。記号だけだと
    ぱっと見でどちらの状態か読み取れない。 */
 .pick-row.excluded .pick-name { color: var(--text-dim); text-decoration: line-through; }
+
+/* ── 担当者の入り切り ── */
+
+/* 形は上の ☑ に倣うが、色は分ける。あちらの .pick-eye.off は赤で「外してある」を
+   表すので、入っていることが肯定のこちらで同じ色を使うと、意味が裏返って読める。
+   常に見せるのは同じ理由——入っているかどうかがこのパネルの主題なので、
+   ふだん隠していると探して当てることになる。 */
+.pick-check {
+  flex: none;
+  width: 26px; height: 26px;
+  display: flex; align-items: center; justify-content: center;
+  border: none; background: transparent;
+  color: var(--text-dim);
+  font-size: 13px; line-height: 1;
+  cursor: pointer; padding: 0;
+  border-radius: 6px;
+  opacity: 0.55;
+  transition: opacity 0.12s, color 0.12s, background 0.12s;
+}
+.pick-row:hover .pick-check,
+.pick-row.active .pick-check { opacity: 1; }
+.pick-check:hover { background: rgba(255,255,255,0.12); color: var(--text); }
+/* 入っているものは常に見せる。入っていることが並び順の理由なので。 */
+.pick-check.on { opacity: 1; color: var(--accent); }
+
+/* 記号だけでなく、名前でも入っていることが分かるようにする。 */
+.pick-row.picked .pick-name { font-weight: 600; }

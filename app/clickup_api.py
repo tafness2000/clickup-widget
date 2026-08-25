@@ -261,23 +261,69 @@ def due_at(start: datetime, preset: str) -> datetime | None:
     return end                                                # today と、知らない指定
 
 
+def parse_assignees(raw) -> list[int]:
+    """画面から来た担当者の並びを、送れる形に均す。
+
+    受けるのはカンマ区切りの文字列（QWebChannel の口に素の配列は渡せない）。
+    数にならないものは落とし、重なりを除いて昇順に並べ替える。
+
+    並べ替えるのが肝心。押した順のまま持ち回ると、同じ顔ぶれでも選んだ順が違うだけで
+    別のものとして扱われ、連打よけ（_submit_key）を素通りして 2 件入る。逆に、
+    入れ直したつもりのものが「さっきと同じ」と見なされて弾かれることもある。
+    後者の方が痛い——打った中断メモが、登録できたように見えて消える。
+    正規化はここ 1 か所に閉じておく。
+
+    数と配列も受けるのは、画面を通らない経路（退避ぶんの送り直しなど）のため。
+
+    ここでは控え（directory.json）に実在するかを確かめない。リストの id は
+    setDefaultList / setListExcluded で控えと突き合わせているので揃えたくなるが、
+    担当者は事情が違う。送り先が ClickUp のタスク作成そのもので、居ない相手の id は
+    向こうが 4xx で断る（is_retryable が 4xx を貯めないので、おかしな id が
+    outbox に残り続けることもない）。
+    逆に突き合わせを入れると、控えが壊れている・まだ取れていないときに、
+    他人へ振ったつもりのものが黙って自分の担当になる。そちらの方が悪い。
+    """
+    if raw is None:
+        return []
+    if isinstance(raw, str):
+        items = raw.split(',')
+    elif isinstance(raw, (list, tuple, set)):
+        items = list(raw)
+    else:
+        items = [raw]
+
+    out = set()
+    for item in items:
+        text = str(item).strip()
+        if not text:
+            continue
+        try:
+            out.add(int(text))
+        except ValueError:
+            continue          # 画面から来る文字なので、数でないものが混ざりうる
+    return sorted(out)
+
+
 def build_task_payload(cfg: dict, name: str, description: str, when: datetime,
-                       assignee_id: str | int | None = None,
+                       assignees: str | int | list | None = None,
                        due_preset: str | None = None) -> dict:
     """送信するタスク本体を組み立てる。
 
     送れずに退避した分も、この結果をそのまま保存して後で送る。日付を組み立て直さないので、
     3 日後に再送されても中断した日のままになる。
-    assignee_id が無ければ自分に割り当てる。
+
+    誰も残らなければ自分に割り当てる。担当のいないタスクは、作った当人しか在り処を
+    知らないまま ClickUp のどこかに残るため。画面の側でも最後のひとりは外せないように
+    してあるが、そこを通らない経路もあるので両方で守る。
     """
-    start    = when.replace(hour=0, minute=0, second=0, microsecond=0)
-    assignee = int(assignee_id) if assignee_id else int(cfg['user_id'])
-    preset   = due_preset or cfg.get('default_due_preset') or DEFAULT_DUE_PRESET
+    start  = when.replace(hour=0, minute=0, second=0, microsecond=0)
+    people = parse_assignees(assignees) or [int(cfg['user_id'])]
+    preset = due_preset or cfg.get('default_due_preset') or DEFAULT_DUE_PRESET
 
     payload = {
         'name': name,
         'description': description,
-        'assignees': [assignee],
+        'assignees': people,
         'priority': 3,
         'start_date': int(start.timestamp() * 1000),
         'start_date_time': False,
@@ -305,11 +351,38 @@ def status_type(task: dict) -> str:
     return ((task.get('status') or {}).get('type') or '').lower()
 
 
-def _summarize(task: dict) -> dict:
+def _others(task: dict, me) -> list[str]:
+    """自分以外の担当者の表示名。
+
+    ひとつのタスクを何人かで持てるので、行を見ただけでは誰と分け合っているのかが
+    分からない。自分は必ず入っている（自分の担当ぶんだけを取ってきているため）ので、
+    出しても何も言っていないのと同じ。省くのは自分だけにする。
+
+    ここで人数は切らない。何人まで見せるかは画面の幅の話で、狭いのは入力窓の側の
+    都合だから、そちらで決める。
+
+    表示名は ClickUp から来る文字なので、ワークスペースの誰かが書き換えられる。
+    見た目を細工する制御文字が混ざりうるので _plain を通す。
+    """
+    out = []
+    for person in task.get('assignees') or []:
+        if str(person.get('id')) == str(me):
+            continue
+        name = _plain(person.get('username') or person.get('email') or '')
+        if name:
+            out.append(name)
+    return out
+
+
+def _summarize(task: dict, me) -> dict:
     """一覧に出す分だけに削る。
 
     list_id も持たせる。完了にするときのステータス名はリストごとに違うので、
     どのリストの分かを画面から返してもらう必要があるため。
+
+    me に既定値は作らない。作ると、渡し忘れた経路で str(None) と比べることになり、
+    誰とも一致しないまま自分まで「他人」として並ぶ。しかも例外にならないので
+    気づけない。_me が None を弾いているのと同じ理由で、ここも黙って通さない。
     """
     text  = (task.get('description') or '').strip()
     first = text.splitlines()[0].strip() if text else ''
@@ -319,6 +392,7 @@ def _summarize(task: dict) -> dict:
         'url':     task.get('url', ''),
         'memo':    _plain(first)[:MEMO_MAX],
         'list_id': str((task.get('list') or {}).get('id') or ''),
+        'others':  _others(task, me),
     }
 
 
@@ -328,16 +402,17 @@ def _fetch_from_default_list(cfg: dict, limit: int) -> list[dict]:
     選別はリストを跨いで集めるときと同じ（is_memo）にする。ここだけ緩めると、
     設定した直後の一覧にだけ工程のタスクや、出さないことにしたリストの分が混ざる。
     """
+    me    = _me(cfg)
     query = urlencode({
         'archived': 'false',
         'subtasks': 'false',
         'order_by': 'created',
-        'assignees[]': _me(cfg),
+        'assignees[]': me,
     })
     data     = api_request(cfg, f"list/{seg(cfg['list_id'])}/task?{query}")
     excluded = {str(x) for x in cfg.get('excluded_lists', [])}
     tasks    = [t for t in data.get('tasks', []) if is_memo(t, excluded)]
-    return [_summarize_wide(t) for t in tasks[:limit]]
+    return [_summarize_wide(t, me) for t in tasks[:limit]]
 
 
 def fetch_open_tasks(cfg: dict, limit: int = FEED_LIMIT) -> list[dict]:
@@ -354,8 +429,9 @@ def fetch_open_tasks(cfg: dict, limit: int = FEED_LIMIT) -> list[dict]:
     if not team:
         return _fetch_from_default_list(cfg, limit)
 
+    me    = _me(cfg)
     query = urlencode({
-        'assignees[]':    _me(cfg),
+        'assignees[]':    me,
         'subtasks':       'false',
         'include_closed': 'false',
         'order_by':       'created',
@@ -364,7 +440,7 @@ def fetch_open_tasks(cfg: dict, limit: int = FEED_LIMIT) -> list[dict]:
     data     = api_request(cfg, f'team/{seg(team)}/task?{query}')
     excluded = {str(x) for x in cfg.get('excluded_lists', [])}
     tasks    = [t for t in data.get('tasks', []) if is_memo(t, excluded)]
-    return [_summarize_wide(t) for t in tasks[:limit]]
+    return [_summarize_wide(t, me) for t in tasks[:limit]]
 
 
 _status_cache: dict[str, str] = {}
@@ -390,11 +466,11 @@ def is_memo(task: dict, excluded: set) -> bool:
     return status_type(task) == 'open'
 
 
-def _summarize_wide(task: dict) -> dict:
+def _summarize_wide(task: dict, me) -> dict:
     """広げた一覧に出す分。通常の一覧より、どこの何かが分かるだけ足す。"""
     listing = task.get('list') or {}
     return {
-        **_summarize(task),
+        **_summarize(task, me),
         'list_name': _plain(listing.get('name') or ''),
         'due':       task.get('due_date'),
         'status':    _plain((task.get('status') or {}).get('status') or ''),
@@ -419,11 +495,12 @@ def fetch_wide_tasks(cfg: dict) -> tuple[list[dict], bool]:
     if not team:
         return [], False
     excluded = {str(x) for x in cfg.get('excluded_lists', [])}
+    me       = _me(cfg)
 
     out: list[dict] = []
     for page in range(WIDE_MAX_PAGES):
         query = urlencode({
-            'assignees[]':    _me(cfg),
+            'assignees[]':    me,
             'subtasks':       'false',
             'include_closed': 'false',
             'order_by':       'due_date',
@@ -431,7 +508,7 @@ def fetch_wide_tasks(cfg: dict) -> tuple[list[dict], bool]:
         })
         data  = api_request(cfg, f'team/{seg(team)}/task?{query}')
         batch = data.get('tasks', [])
-        out.extend(_summarize_wide(t) for t in batch if is_memo(t, excluded))
+        out.extend(_summarize_wide(t, me) for t in batch if is_memo(t, excluded))
         if data.get('last_page') or len(batch) < WIDE_PAGE_SIZE:
             return out, False        # 終わりまで見た
     return out, True                 # 頁を使い切った＝この先にもまだ並んでいる

@@ -75,5 +75,59 @@ tasks = clickup_api._fetch_from_default_list(
 check('既定リストだけの経路（team_id が無いとき）も同じ選別',
       [t['id'] for t in tasks], ['a'])
 
+
+# ── 誰と分け合っているか ──────────────────────────────────────
+#
+# 自分は必ず入っている（自分の担当ぶんだけを取ってきているため）ので、
+# 出しても何も言っていないのと同じ。省くのは自分だけにする。
+ME = 1
+
+
+def others(assignees) -> list:
+    task = {'id': 'x', 'name': 'n', 'status': {'type': 'open'}, 'list': {'id': '1'}}
+    if assignees is not None:
+        task['assignees'] = assignees
+    return clickup_api._summarize_wide(task, ME)['others']
+
+
+check('自分ひとりなら誰も出さない', others([{'id': 1, 'username': '自分'}]), [])
+check('自分を省いて他人だけ出す',
+      others([{'id': 1, 'username': '自分'}, {'id': 2, 'username': '田中'}]), ['田中'])
+check('人数は切らない',
+      others([{'id': 2, 'username': 'a'}, {'id': 3, 'username': 'b'},
+              {'id': 4, 'username': 'c'}, {'id': 5, 'username': 'd'}]),
+      ['a', 'b', 'c', 'd'])
+check('担当が空でも落ちない', others([]), [])
+check('assignees ごと無い古い応答でも落ちない', others(None), [])
+check('表示名が無ければメールアドレスで代える',
+      others([{'id': 2, 'email': 'tanaka@example.com'}]), ['tanaka@example.com'])
+check('名前もアドレスも無い相手は並べない',
+      others([{'id': 2}, {'id': 3, 'username': '田中'}]), ['田中'])
+# ClickUp の id は数字で来ることも文字列で来ることもある。取り違えると
+# 自分が「他人」として並ぶ。しかも例外にならないので気づけない。
+check('id が文字でも数字でも自分は自分',
+      others([{'id': '1', 'username': '自分'}, {'id': 2, 'username': '田中'}]), ['田中'])
+
+# 表示名はワークスペースの誰でも書き換えられる。並びを裏返す制御文字を
+# 混ぜられても、そのまま一覧へ流さない。
+check('向きを変える制御文字は落とす',
+      others([{'id': 2, 'username': '田中\u202e子'}]), ['田中子'])
+
+# 両方の経路に入っていること。片方だけだと、設定した直後（team_id をまだ
+# 控えていないとき）の一覧にだけ出ない、という分かりにくい差になる。
+WITH_MATE = {
+    'tasks': [{'id': 'a', 'name': 'a', 'status': {'type': 'open'}, 'list': {'id': '1'},
+               'assignees': [{'id': 1, 'username': '自分'},
+                             {'id': 2, 'username': '田中'}]}],
+    'last_page': True,
+}
+clickup_api.api_request = lambda cfg, p, method='GET', body=None: WITH_MATE
+
+tasks, _more = clickup_api.fetch_wide_tasks(CFG)
+check('跨いで集める経路にも担当者が入る', [t['others'] for t in tasks], [['田中']])
+
+tasks = clickup_api._fetch_from_default_list({'user_id': 1, 'list_id': '1'}, 5)
+check('既定リストだけの経路にも担当者が入る', [t['others'] for t in tasks], [['田中']])
+
 print(f'\n{failed} 件しくじりました' if failed else '\nすべて通りました')
 sys.exit(1 if failed else 0)

@@ -118,6 +118,91 @@ function check(label, got, want) {
   check('打ちかけているときは下書きを触らない', r,
     { memo: '手で直したメモ', task: '打ちかけ' });
 
+  // ── 打ちかけを守る ────────────────────────────────────────
+  //
+  // 窓を閉じてもプロセスは生きている（closeEvent が hide するだけ）ので、
+  // 打った文字はそのまま残っている。pause.pyw は開き直すたび resetForm を通すので、
+  // 消さないと決めるのはこちら側。
+
+  // 6. 打ちかけたまま閉じて、開き直したとき
+  r = run(`
+    autoMemo = '前の作業先'; memoInput.value = '前の作業先';
+    taskInput.value = '打ちかけの題';
+    resetForm('新しい作業先');
+    ({ task: taskInput.value, memo: memoInput.value })
+  `);
+  check('打ちかけたまま開き直しても、打った文字は残る', r,
+    { task: '打ちかけの題', memo: '前の作業先' });
+
+  // 7. メモだけ手で直してある（題はまだ空）
+  r = run(`
+    autoMemo = '前の作業先'; memoInput.value = '手で直したメモ'; taskInput.value = '';
+    resetForm('新しい作業先');
+    ({ task: taskInput.value, memo: memoInput.value })
+  `);
+  check('メモだけ直してあっても残る', r, { task: '', memo: '手で直したメモ' });
+
+  // 8. 何も打っていなければ、今までどおり
+  r = run(`
+    autoMemo = '前の作業先'; memoInput.value = '前の作業先'; taskInput.value = '';
+    resetForm('新しい作業先');
+    ({ task: taskInput.value, memo: memoInput.value })
+  `);
+  check('打ちかけが無ければ、今までどおり作業先に入れ替わる', r,
+    { task: '', memo: '新しい作業先' });
+
+  // 9. 空白だけ打ったのは打ちかけと見なさない（袖が触れただけ、ということがある）
+  r = run(`
+    autoMemo = '前の作業先'; memoInput.value = '前の作業先'; taskInput.value = '   ';
+    resetForm('新しい作業先');
+    ({ task: taskInput.value, memo: memoInput.value })
+  `);
+  check('空白だけなら打ちかけと見なさない', r, { task: '', memo: '新しい作業先' });
+
+  // 10. 登録し終わったあとは、まっさらから始まる
+  r = run(`
+    taskInput.value = '登録した題'; memoInput.value = '登録したメモ'; autoMemo = '';
+    onSubmitDone({ ok: true });
+    resetForm('新しい作業先');
+    ({ task: taskInput.value, memo: memoInput.value })
+  `);
+  check('登録し終わったあとは残さない', r, { task: '', memo: '新しい作業先' });
+
+  // 11. 打ちかけが残っていても、打つ画面へ戻す手当ては必ずやる。
+  //     ここを飛ばすと送信中の札が下りず、Ctrl+Enter も効かないまま固まる。
+  r = run(`
+    taskInput.value = '打ちかけの題';
+    successArea.style.display = 'flex'; formArea.style.display = 'none';
+    submitting = true; submitBtn.disabled = true;
+    resetForm('新しい作業先');
+    ({ task: taskInput.value, submitting: submitting, disabled: submitBtn.disabled,
+       success: successArea.style.display, form: formArea.style.display })
+  `);
+  check('打ちかけが残っていても、送信中の札は下ろす', r,
+    { task: '打ちかけの題', submitting: false, disabled: false,
+      success: 'none', form: '' });
+
+  // ── 名前の畳み方 ──────────────────────────────────────────
+  //
+  // チップは窓幅 390px のうち 4 割しか使えない。CSS の省略記号に任せると
+  // 右端の「+2」から削られて、何人に振ったのかが画面から消える。
+  r = run(`({
+    none:  peopleLabel([]),
+    one:   peopleLabel(['田中']),
+    two:   peopleLabel(['田中', '佐藤']),
+    four:  peopleLabel(['田中', '佐藤', '鈴木', '高橋']),
+    split: peopleLabel(['Yamada Taro']),
+    long:  peopleLabel(['あいうえおかきくけこ', '佐藤']),
+    roman: peopleLabel(['Furukawa']),
+    empty: peopleLabel(['', '田中']),
+    none2: peopleLabel(undefined),
+  })`);
+  check('何人かをひと目ぶんに畳む', r, {
+    none: '', one: '田中', two: '田中 +1', four: '田中 +3',
+    split: 'Yamada', long: 'あいうえおかき… +1', roman: 'Furukawa',
+    empty: '田中', none2: '',
+  });
+
   console.log(failed ? `\n${failed} 件しくじりました` : '\nすべて通りました');
   process.exit(failed ? 1 : 0);
 })();

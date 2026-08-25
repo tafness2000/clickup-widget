@@ -35,7 +35,7 @@ const MEMBERS = Array.from({ length: 78 }, (_, i) => ({
 
 // picker.js が触るもののうち、ui.js と wide.js が持っているぶん。
 function sandbox() {
-  return {
+  const box = {
     console,
     document: {
       createElement: makeEl,
@@ -51,7 +51,8 @@ function sandbox() {
                   { id: 'd3', name: '3日以内' }, { id: 'week', name: '今週中' },
                   { id: 'd7', name: '1週間' }, { id: 'none', name: '期限なし' }],
     DEFAULT_DUE: 'today',
-    pickedList: LISTS[0], pickedUser: MEMBERS[0], pickedDue: { id: 'today' },
+    pickedList: LISTS[0], pickedUsers: [MEMBERS[0]], pickedDue: { id: 'today' },
+    toggleUser: () => {},
     favRank: () => 1, isFav: () => false, toggleFav: () => {}, setDefault: () => {},
     renderTargets: () => {}, bridge: null,
     EXCLUDED: [], WIDE_TASKS: [], toggleExcluded: () => {},
@@ -61,6 +62,10 @@ function sandbox() {
     picker: makeEl(), pickerScrim: makeEl(),
     chipList: makeEl(), chipUser: makeEl(), chipDue: makeEl(), taskInput: makeEl(),
   };
+  // box を通して読む。vm の中で pickedUsers を差し替えても、ここから見える。
+  box.isPickedUser = (item) =>
+    box.pickedUsers.some((u) => String(u.id) === String(item.id));
+  return box;
 }
 
 const source = fs.readFileSync(target, 'utf8');
@@ -113,10 +118,10 @@ r = run({ pickedList: LISTS[120] },
 check('矢印で下端を越えても行の中に留まる', r, { active: 59 });
 
 // 5. 担当者も同じ（78 人）
-r = run({ pickedUser: MEMBERS[70] }, `openPicker('user'); ${REPORT}`);
-check('担当者も、60 人の外を指していれば上の方で光る',
+r = run({ pickedUsers: [MEMBERS[70]] }, `openPicker('user'); ${REPORT}`);
+check('担当者も、60 人の外を選んでいれば上の方で光る',
   { active: r.active, lit: r.lit, tag: r.tag },
-  { active: 1, lit: 'member70', tag: 'いま' });   // 自分の次
+  { active: 1, lit: 'member70', tag: '' });   // 自分の次。札は出さない（☑ が語る）
 
 // 6. 出さないリストは「選んであるもの」という概念が無い
 r = run({}, `openPicker('exclude'); ${REPORT}`);

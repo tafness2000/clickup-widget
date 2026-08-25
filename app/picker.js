@@ -62,15 +62,20 @@ function searchMembers(q) {
   };
   const self = DIR.members.find(m => m.id === SELF.id) || SELF;
   if (!tokens.length) {
-    // 「自分 → いま指してある相手 → ★ → 残り」。
+    // 「自分 → いま選んである人ぜんぶ → ★ → 残り」。
     // 他人に振るのは★の人がほとんど、という前提。
     const out  = [{ item: self, tag: '自分' }];
     const seen = new Set([String(self.id)]);
-    // いま指してある相手も先に出す。リストと同じ理由で、切り捨てに埋もれさせない。
-    if (!seen.has(String(pickedUser.id))) {
-      const now = DIR.members.find(m => String(m.id) === String(pickedUser.id));
-      if (now) { out.push({ item: now, tag: 'いま' }); seen.add(String(pickedUser.id)); }
-    }
+    // 選んである人は全員、切り捨て（60 件）より前に出す。ここを落とすと、
+    // 61 人目より後ろに選んだ人が居るとき、開き直しても見えず外せなくなる。
+    // 「いま」の札は付けない。☑ が点いていることが並び順の理由なので、二重になる。
+    pickedUsers.forEach(picked => {
+      const id = String(picked.id);
+      if (seen.has(id)) return;
+      // 控えに居ればそちらを使う（名前とアドレスが整っている）。
+      out.push({ item: DIR.members.find(m => String(m.id) === id) || picked, tag: '' });
+      seen.add(id);
+    });
     FAV.members.forEach(id => {
       const m = DIR.members.find(x => String(x.id) === String(id));
       if (m && !seen.has(String(id))) { out.push({ item: m, tag: '' }); seen.add(String(id)); }
@@ -139,6 +144,14 @@ function isFixedList(kind) { return kind === 'due' || kind === 'reschedule'; }
 // 一度に組む行数。数百件を全部組むと打鍵ごとに重くなるので、見えるぶんだけに切る。
 const PICKER_MAX = 60;
 
+// パネルの上に出す断り書き。何が起きるか・どう操るかを、押す前に言っておく。
+// 担当者のぶんを出すのは、Enter が「選んで閉じる」ではなくなるため。
+// 触れば分かる、では済まない変わり方なので、開いた時点で書いておく。
+const PICKER_NOTES = {
+  exclude: 'チェックを外したリストは、この一覧にも「最近登録したタスク」にも出なくなります',
+  user:    'Enter か Space で入り切り。絞り込みが空のとき Enter で決まります',
+};
+
 function searchFor(kind, q) {
   if (kind === 'list')       return searchLists(q);
   if (kind === 'user')       return searchMembers(q);
@@ -160,6 +173,14 @@ function searchFor(kind, q) {
 // その期限へ動いてしまう。出さないリストなら、そのリストが一覧から外れてしまう。
 function activeIndex(rows) {
   if (state.kind === 'exclude') return -1;
+  // 担当者は何人でも選べるので、currentPick のような「いま選んでいる 1 つ」が無い。
+  // 切り詰めたあとの並びで最初に見つかったものを指す。当たらなければ先頭
+  //（exclude の -1 とは分ける。こちらはトグルなので、Enter を誤爆しても
+  //  押し直せば戻せる。閉じてしまう list や due とは重さが違う）。
+  if (state.kind === 'user') {
+    const picked = rows.findIndex(r => isPickedUser(r.item));
+    return picked >= 0 ? picked : 0;
+  }
   const found = rows.findIndex(r => r.item.id === currentPick().id);
   if (found >= 0) return found;
   return isFixedList(state.kind) ? -1 : 0;
@@ -182,10 +203,9 @@ function renderPicker() {
   state.rows   = all.slice(0, PICKER_MAX);
   state.active = activeIndex(state.rows);
 
-  pickerNote.textContent = state.kind === 'exclude'
-    ? 'チェックを外したリストは、この一覧にも「最近登録したタスク」にも出なくなります'
-    : '';
-  pickerNote.style.display = state.kind === 'exclude' ? '' : 'none';
+  const note = PICKER_NOTES[state.kind] || '';
+  pickerNote.textContent = note;
+  pickerNote.style.display = note ? '' : 'none';
 
   pickerList.replaceChildren();
   if (!state.rows.length) {
@@ -280,6 +300,21 @@ function isDefaultItem(item) {
   return false;                    // 担当者に既定は無い（自分が既定）
 }
 
+// 担当者の入り切り。形は「出さないリスト」の ☑ に倣うが、色は分ける。
+// あちらの赤は「外してある」を表すので、入っているのが肯定のこちらで同じ色を使うと
+// 意味が裏返って読める。
+function buildCheckButton(item) {
+  const on  = isPickedUser(item);
+  const box = document.createElement('button');
+  box.type = 'button';
+  box.className = 'pick-check' + (on ? ' on' : '');
+  box.textContent = on ? '☑' : '☐';
+  box.title = on ? 'この人を担当から外す' : 'この人も担当にする';
+  fixMousedown(box, () => toggleUser(item));
+  return box;
+}
+
+
 function buildPinButton(item) {
   const pin = document.createElement('button');
   pin.type = 'button';
@@ -333,6 +368,12 @@ function buildPickerRow(row, index, tokens) {
     el.appendChild(buildPinButton(row.item));
   // 期限は数が決まっているので★を付ける意味がない。
   if (state.kind === 'list' || state.kind === 'user') el.appendChild(buildFavButton(row.item));
+  // 担当者も、選ぶのではなく入り切り。いま入っているかどうかがこのパネルの主題なので、
+  // ★より右——行の端——に常に見せる。
+  if (state.kind === 'user') {
+    el.classList.toggle('picked', isPickedUser(row.item));
+    el.appendChild(buildCheckButton(row.item));
+  }
   // 出さないリストは、選ぶのではなくその場で切り替える。
   if (state.kind === 'exclude') {
     el.classList.toggle('excluded', EXCLUDED.includes(String(row.item.id)));
@@ -354,9 +395,10 @@ function setActive(index) {
   els[state.active].scrollIntoView({ block: 'nearest' });
 }
 
+// 「いま選んでいるもの」が 1 つに決まる kind だけが通る。担当者は複数あるので
+// ここには入れない（activeIndex 側で分けてある）。
 function currentPick() {
   if (state.kind === 'list')       return pickedList;
-  if (state.kind === 'user')       return pickedUser;
   if (state.kind === 'reschedule') return { id: currentDuePreset(state.target.task) };
   if (state.kind === 'exclude')    return { id: '' };   // 「いま選んでいるもの」は無い
   return pickedDue;
@@ -402,15 +444,17 @@ function choose(index) {
   // 出さないリストは選ぶものではなく、その場で切り替えるもの。パネルは開けたままにする
   //（続けて何件か外したいことが多い）。
   if (state.kind === 'exclude') { toggleExcluded(row.item); return; }
+  // 担当者も同じで、選ぶのではなく入り切り。何人か続けて選ぶのが普通なので閉じない。
+  // 閉じるのは Esc・Tab・外を押す・絞り込みが空のときの Enter。
+  if (state.kind === 'user') { toggleUser(row.item); return; }
   if (state.kind === 'reschedule') {
     const target = state.target;      // 閉じると消えるので先に控える
     closePicker(false);
     applyReschedule(target, row.item.id);
     return;
   }
-  if (state.kind === 'list')      pickedList = row.item;
-  else if (state.kind === 'user') pickedUser = row.item;
-  else                            pickedDue  = row.item;
+  if (state.kind === 'list') pickedList = row.item;
+  else                       pickedDue  = row.item;
   closePicker(false);
   renderTargets();
   // 選んだら本題へ戻す。選択は手段であって目的ではないため。

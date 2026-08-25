@@ -48,6 +48,48 @@ function showError(text) {
   hintArea.style.display = text ? 'none' : '';
 }
 
+// ── 人の名前の見せ方 ──────────────────────────────────────
+
+// 名前に使える幅。半角を 1、全角を 2 として数える。担当者のチップは
+// 窓幅 390px のうち 4 割しか使えず、そこに「+2」まで収める必要がある。
+const NAME_WIDTH_MAX = 16;
+
+// 半角を 1、全角を 2 として数えた幅。実際の字送りは書体で変わるが、
+// ここで欲しいのは「刈るかどうか」の見当なので、これで足りる。
+//
+// 字数で切ってはいけない。ClickUp の表示名はローマ字のこともあり、
+// 日本語の 4 文字ぶんの幅しかない「Furukawa」まで刈ってしまう。
+function displayWidth(text) {
+  let width = 0;
+  for (const ch of text) width += /[\x20-\x7E\uFF61-\uFF9F]/.test(ch) ? 1 : 2;
+  return width;
+}
+
+// 空白（半角・全角）で割った先頭の塊。ClickUp の表示名は「姓 名」と「名 姓」が
+// 混ざっているので、どちらでも頭のひと塊を採る。長い名前はここで刈ってしまう。
+//
+// CSS の省略記号（text-overflow）に任せてはいけない。チップは幅が足りず、
+// 削られるのは右端＝「+2」の側になる。名前が少し長いだけで、何人に振ったのかが
+// 画面から消える。
+function shortName(name) {
+  const head = String(name || '').split(/[\s　]+/).filter(Boolean)[0] || '';
+  if (displayWidth(head) <= NAME_WIDTH_MAX) return head;
+  let out = '';
+  for (const ch of head) {
+    if (displayWidth(out + ch) > NAME_WIDTH_MAX - 1) break;   // 「…」のぶんを空ける
+    out += ch;
+  }
+  return out + '…';
+}
+
+// 何人かをひと目ぶんに畳む。「先頭ひとり ＋ 残りの数」。
+function peopleLabel(names) {
+  const list = (names || []).filter(Boolean);
+  if (!list.length) return '';
+  const head = shortName(list[0]);
+  return list.length === 1 ? head : `${head} +${list.length - 1}`;
+}
+
 // ── 登録先の候補 ──────────────────────────────────────────
 
 let DIR = { lists: [], members: [] };
@@ -73,9 +115,10 @@ const DUE_PRESETS = [
 ];
 let DEFAULT_DUE = 'today';
 
-let pickedList = DEFAULT_LIST;
-let pickedUser = SELF;
-let pickedDue  = DUE_PRESETS[0];
+let pickedList  = DEFAULT_LIST;
+// 担当者は何人でも。押した順に並ぶ（送るときに Python 側が昇順へ均す）。
+let pickedUsers = [SELF];
+let pickedDue   = DUE_PRESETS[0];
 
 // pause.pyw が手元の控えから丸ごと渡してくる。絞り込みはこちら側でやる。
 // 打鍵ごとに Python を往復させるより速く、通信も要らない。
@@ -106,23 +149,85 @@ function setFavorites(fav) {
 }
 
 function resetTargets() {
-  pickedList = DEFAULT_LIST;
-  pickedUser = SELF;
-  pickedDue  = DUE_PRESETS.find(d => d.id === DEFAULT_DUE) || DUE_PRESETS[0];
+  pickedList  = DEFAULT_LIST;
+  pickedUsers = [SELF];
+  pickedDue   = DUE_PRESETS.find(d => d.id === DEFAULT_DUE) || DUE_PRESETS[0];
   renderTargets();
 }
 
 function isDefaultList() { return pickedList.id === DEFAULT_LIST.id; }
-function isSelf()        { return pickedUser.id === SELF.id; }
 function isDefaultDue()  { return pickedDue.id === DEFAULT_DUE; }
+
+// 人の id は、控え（ClickUp の応答）では数、画面で組んだものでは文字と、
+// 経路によって型が変わる。=== で比べると同じ人を別人と読んで、
+// 「自分が担当に入っていない」と言い続けることになる。必ず文字にしてから比べる。
+function samePerson(a, b) { return String(a && a.id) === String(b && b.id); }
+
+function isPickedUser(item) { return pickedUsers.some(u => samePerson(u, item)); }
+function hasSelf()          { return isPickedUser(SELF); }
+function isDefaultUsers()   { return pickedUsers.length === 1 && hasSelf(); }
+
+// 担当者の名前を、見せる順に並べる。自分は先頭。
+// まず知りたいのは「これは自分の手元に残るのか」なので。
+function pickedUserNames() {
+  // 元の配列は触らない。並べ替えは見せ方の話で、選んだ順そのものではない。
+  return [...pickedUsers]
+    .sort((a, b) => (samePerson(a, SELF) ? 0 : 1) - (samePerson(b, SELF) ? 0 : 1))
+    .map(u => (samePerson(u, SELF) ? '自分' : u.name));
+}
+
+// 自分が担当から外れているとき、誰に振ったのかをひと言で。
+// ここは幅に余裕があるので名前は刈らない（チップと違って 2 行使える）。
+function awayText() {
+  const names = pickedUserNames();
+  const head  = names[0] || '';
+  return names.length > 1 ? `${head}さんほか ${names.length - 1} 人` : `${head}さん`;
+}
+
+// チップに載せきれない中身は、指を置けば読めるようにしておく。
+// ui.html に書いてある「担当者（Ctrl+U）」を上書きする形になるので、
+// ショートカットの案内もここで併せて出す。
+function userChipTitle() {
+  const lines = ['担当者（Ctrl+U）', pickedUserNames().join('、')];
+  if (!hasSelf())
+    lines.push('自分が担当に入っていません。'
+             + 'この一覧は自分が担当のぶんだけを出すので、ここには出ません');
+  return lines.join('\n');
+}
 
 function renderTargets() {
   chipListLabel.textContent = pickedList.name;
-  chipUserLabel.textContent = isSelf() ? '自分' : pickedUser.name;
+  chipUserLabel.textContent = peopleLabel(pickedUserNames());
   chipDueLabel.textContent  = pickedDue.name;
   chipList.classList.toggle('changed', !isDefaultList());
-  chipUser.classList.toggle('changed', !isSelf());
+  chipUser.classList.toggle('changed', !isDefaultUsers());
   chipDue.classList.toggle('changed', !isDefaultDue());
+  // 自分が外れているときは、登録する前に言っておく。一覧は自分の担当ぶんだけを
+  // 取ってくるので、このまま送ると手元のどこにも出てこない。
+  // .changed（既定と違う）とは別の話なので、色は潰さず枠だけで言う。
+  chipUser.classList.toggle('away', !hasSelf());
+  chipUser.title = userChipTitle();
+}
+
+// 担当者の入り切り。候補パネルは開けたままにする（続けて何人か選ぶのが普通なので）。
+//
+// 最後のひとりは外せない。担当のいないタスクは、作った当人しか在り処を知らないまま
+// ClickUp のどこかに残る。外したいなら、先に別の人を足してから外せばよい。
+function toggleUser(item) {
+  const on = isPickedUser(item);
+  if (on && pickedUsers.length === 1) {
+    // 次にどれかを入り切りすれば renderPicker が書き戻すので、ここでは出すだけ。
+    pickerNote.textContent = 'ひとりは選んでください。'
+                           + '先に別の人を足せば、この人は外せます';
+    pickerNote.style.display = '';
+    return;
+  }
+  // 配列は差し替える。push で書き換えると、それを握っている側が
+  // 気づかないまま中身だけ変わる。
+  pickedUsers = on ? pickedUsers.filter(u => !samePerson(u, item))
+                   : [...pickedUsers, item];
+  renderTargets();
+  if (isOpen()) renderPicker();      // ☑ の付け外しと並び順を、その場で映す
 }
 
 // ── よく使うもの ──────────────────────────────────────────
@@ -241,16 +346,36 @@ function wakeUp(context) {
   if (context) refreshContext(context);      // 空で上書きしてメモを消さない
 }
 
+// 手で打ったものが残っているか。
+//
+// メモは autoMemo と比べる。自動で入れた下書きのままなら、手は付いていない。
+// 見分ける規則をここ 1 か所に集めて、resetForm と refreshContext の両方で使う。
+function hasDraft() {
+  return !!taskInput.value.trim() || memoInput.value !== autoMemo;
+}
+
 // context には中断直前まで前にいたウィンドウ名が入る。あくまで下書きなので消して構わない。
+//
+// ただし打ちかけているものは消さない。中断メモを打っている最中に別の用事が入るのは
+// 日常的で、そのたびに Esc で引っ込めると打ち直しになっていた。窓を閉じても
+// このプロセスは生きているので、値はそのまま残っている。消さなければよいだけ。
+//
+// リストや担当者まで組んであるなら、そちらも一緒に残す（resetTargets を飛ばす）。
+// 文字だけ残して選び先を既定へ戻すと、送る直前に気づかないまま別の場所へ入る。
+//
+// 打つ画面へ戻す手当て——送信中の札を下ろす・広げた一覧を畳む・候補を閉じる——は、
+// 打ちかけの有無に関わらず必ずやる。ここを飛ばすと窓が固まったまま戻せなくなる。
 function resetForm(context) {
   cancelLater();
-  taskInput.value = '';
-  autoMemo = context || '';
-  memoInput.value = autoMemo;
   showError('');
   closePicker(false);
   closeWide();             // 広げたまま呼び出されても、打つ画面から始める
-  resetTargets();          // 呼び出すたび既定（自分のリスト・自分）へ戻す
+  if (!hasDraft()) {
+    taskInput.value = '';
+    autoMemo = context || '';
+    memoInput.value = autoMemo;
+    resetTargets();        // 打ちかけが無いときだけ、既定（自分のリスト・自分）へ戻す
+  }
   formArea.style.display = '';
   successArea.style.display = 'none';
   submitting = false;              // 前回の送信が終わったままなので、ここで開ける
@@ -261,7 +386,7 @@ function resetForm(context) {
 // 出しっぱなしのまま呼び直されたとき。まだ何も手を付けていなければ、
 // 今の作業先に入れ替える。打ちかけているなら触らない。
 function refreshContext(context) {
-  if (!taskInput.value && memoInput.value === autoMemo) {
+  if (!hasDraft()) {
     autoMemo = context || '';
     memoInput.value = autoMemo;
   }
@@ -318,7 +443,11 @@ function buildRow(task) {
   // リストを跨いで集めているので、それが無いと見分けが付かない。
   const elsewhere = task.list_id && String(task.list_id) !== String(DEFAULT_LIST.id)
     ? (task.list_name || '') : '';
-  const sub = [elsewhere, task.memo].filter(Boolean).join(' · ');
+  // 誰と分け合っているかは、メモより前に置く。この行は 1 行しかないので、
+  // 溢れたぶんは後ろから省略記号で切られる。メモは ClickUp を開けば読めるが、
+  // 担当者は行から読めないと確かめようがない。切られてよいのはメモの側。
+  const who = peopleLabel(task.others);
+  const sub = [elsewhere, who && '@' + who, task.memo].filter(Boolean).join(' · ');
   if (sub) {
     const memo = document.createElement('div');
     memo.className = 'feed-memo';
@@ -357,21 +486,40 @@ function doSubmit() {
   showError('');
   submitting = true;
   submitBtn.disabled = true;
-  bridge.submit(name, memoInput.value, String(pickedList.id), String(pickedUser.id),
-                pickedDue.id);
+  // 担当者はカンマで繋いで 1 本にする（QWebChannel の口に配列は渡せない）。
+  // 重なりや並び順を均すのは Python 側。画面の押し順のまま送ってよい。
+  bridge.submit(name, memoInput.value, String(pickedList.id),
+                pickedUsers.map(u => String(u.id)).join(','), pickedDue.id);
 }
 
 // 登録の結果。送るのは裏でやっているので、返事はここへ届く
 //（待っている間も窓は動くし、ホットキーも効く）。
 function onSubmitDone(data) {
   if (data.ok) {
+    // 送れた（または預かった）ぶんは、打ちかけとしては片付いている。ここで空に
+    // しておかないと、次に窓を出したとき resetForm が「打ちかけがある」と読んで、
+    // 登録済みのものが入ったまま出てくる。
+    // duplicate（連打の 2 件目）も queued（預かった分）も、入っていることに変わりない。
+    taskInput.value = '';
+    memoInput.value = '';
+    autoMemo = '';
     // 送れずに退避した場合は、登録できたように見せずそのことを伝える。
+    //
+    // 自分が担当から外れているときは「出ません」ではなく「なぜ出ないか」を言う。
+    // 行に担当者を出すようにしたので、ただ「出ません」とだけ書くと、
+    // 一覧に他人ぶんも出るようになったのに、という食い違いに読める。
+    // 預かった場合は触れない。まだ登録していないのだから、出ないのは当たり前で、
+    // 言うべきは「まだ送れていない」ことの方。
     successText.textContent = data.queued
       ? '接続できないため保存しました。つながり次第、登録します'
-      : '登録しました';
+      : data.away
+        ? `${awayText()}に振りました。`
+          + 'この一覧は自分が担当のぶんだけを出すので、ここには出ません'
+        : '登録しました';
     formArea.style.display = 'none';
     successArea.style.display = 'flex';
-    later(data.queued ? 1800 : 600, () => bridge.closeWindow());
+    // 読ませたい字数ぶんだけ置く。600ms は「登録しました」を読み取る間。
+    later(data.queued ? 1800 : data.away ? 2600 : 600, () => bridge.closeWindow());
     return;
   }
   // 失敗したときだけ解除する。成功したら窓ごと引っ込むので戻す必要がない。
@@ -415,6 +563,31 @@ document.addEventListener('keydown', e => {
     if (e.key === 'Enter' && !e.ctrlKey && !e.metaKey) {
       // 変換確定の Enter を決定と取り違えない。
       if (e.isComposing || e.keyCode === 229) return;
+      e.preventDefault();
+      // 担当者だけは、Enter の行き先を絞り込み欄の中身で分ける。何人でも選べるので
+      // ひとりごとに閉じては用を成さないが、Enter で終われないのも手に馴染まない。
+      //
+      //   絞り込みに打ってある → その人を入れて、次を探せるよう欄を空にする
+      //   空                   → もう選び終わったとみて閉じる
+      //
+      // これで「たなか → Enter → さとう → Enter → Enter」と、手を離さずに終われる。
+      if (state.kind === 'user') {
+        if (!pickerSearch.value) { closePicker(true); return; }
+        // 当たるものが無ければ何もしない。ここで欄まで空にすると、打ち間違いや
+        // 変換し忘れのときに、誰も選べないうえ打ち直しになる。
+        if (!state.rows.length) return;
+        choose(state.active);
+        pickerSearch.value = '';
+        renderPicker();            // 空欄の並び（選んだ人が上に来る）へ組み直す
+        return;
+      }
+      choose(state.active);
+      return;
+    }
+    // 絞り込みに何も打っていないときの空白は、光っている行の入り切りに使う。
+    // 矢印だけで選ぶ道を残すため。打ちかけているなら名前の中の空白として通すので、
+    // 「田中 太郎」のような 2 語での絞り込みはそのまま効く。
+    if (e.key === ' ' && state.kind === 'user' && !pickerSearch.value) {
       e.preventDefault();
       choose(state.active);
       return;

@@ -40,7 +40,9 @@ function inScope(task, scope) {
 // 「どこに書いたか」は覚えていないのが普通なので、欄を分けても意味がない。
 function matchesQuery(task, tokens) {
   if (!tokens.length) return true;
-  const hay = [task.name, task.memo, task.list_name].filter(Boolean).join(' ').toLowerCase();
+  // 担当者も混ぜる。「田中に振ったやつ」で探すのが自然なため。
+  const hay = [task.name, task.memo, task.list_name, ...(task.others || [])]
+    .filter(Boolean).join(' ').toLowerCase();
   return tokens.every(t => hay.includes(t));
 }
 
@@ -171,6 +173,19 @@ function buildWideRow(task) {
   const side = document.createElement('div');
   side.className = 'wide-side';
   side.appendChild(buildWideDue(task));
+
+  // 期限の下に置く。.wide-row は align-items: flex-start なので、行の高さは
+  // 3 段ある .wide-main が決める。ここが 2 段になっても行は伸びない。
+  // .wide-main の 3 段目（リスト名 · ステータス）へ足すと 1 行に詰め込むことになり、
+  // いちばん切られたくないリスト名が先に消える。
+  const who = peopleLabel(task.others);
+  if (who) {
+    const el = document.createElement('div');
+    el.className = 'wide-who';
+    el.textContent = '@' + who;
+    el.title = (task.others || []).join('、');     // 畳んだぶんは、指を置けば読める
+    side.appendChild(el);
+  }
 
   row.append(buildWideCheck(task, row), buildWideMain(task), side);
   row.addEventListener('click', () => { if (bridge && task.url) bridge.openTask(task.url); });
