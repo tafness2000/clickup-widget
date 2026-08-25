@@ -605,6 +605,8 @@ body.wide #wideArea {
   text-align: center;
   line-height: 1.55;
   padding: 0 26px;
+  /* 文面に入れた改行をそのまま使う。折り返し任せだと語の途中で切れて読みにくい。 */
+  white-space: pre-line;
 }
 
 /* ── 一覧の絞り込み ── */

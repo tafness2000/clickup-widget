@@ -143,11 +143,20 @@ r = run(`openPicker('user'); pickerSearch.value = 'member01'; renderPicker();
 check('絞り込んで Enter を押すと、入れて欄が空になる', r,
   { kind: 'user', search: '', names: ['member00', 'member01'] });
 
-// 7. 絞り込みが空のときの Enter → 決まって閉じる
-r = run(`openPicker('user'); choose(1); pickerSearch.value = '';
-         __press({ key: 'Enter' });
+// 7. 絞り込みが空のときも、Enter は入り切り。ひとりごとに閉じては用を成さない
+r = run(`openPicker('user'); setActive(1); __press({ key: 'Enter' });
+         ({ kind: state.kind, names: ${NAMES} })`);
+check('絞り込みが空でも Enter は入り切りで、閉じない', r,
+  { kind: 'user', names: ['member00', 'member01'] });
+
+// 7b. 閉じるのは Esc と Tab と、外を押したとき
+r = run(`openPicker('user'); choose(1); __press({ key: 'Escape' });
          ({ kind: state.kind, count: pickedUsers.length })`);
-check('絞り込みが空のとき Enter で決まる', r, { kind: null, count: 2 });
+check('Esc で決まって閉じる', r, { kind: null, count: 2 });
+
+r = run(`openPicker('user'); choose(1); __press({ key: 'Tab' });
+         ({ kind: state.kind, count: pickedUsers.length })`);
+check('Tab でも決まって閉じる', r, { kind: null, count: 2 });
 
 // 8. 矢印で合わせて Space
 r = run(`openPicker('user'); setActive(2); __press({ key: ' ' }); ({ names: ${NAMES} })`);
@@ -217,6 +226,24 @@ r = run(`let sent = null;
          doSubmit();
          ({ assignees: sent[3] })`);
 check('担当者はカンマで繋いで送る', r.assignees, '3,1');
+
+// ── 登録し終わったときの文面 ──────────────────────────────────
+//
+// 折り返し任せにすると「担当の / ぶんだけを」のように語の途中で切れる。
+// 文の切れ目で自分で改めているか（CSS 側は white-space: pre-line）。
+
+r = run(`pickedUsers = [DIR.members[1], DIR.members[2]];
+         onSubmitDone({ ok: true, away: true }); cancelLater();
+         ({ lines: successText.textContent.split('\\n') })`);
+check('自分が外れているときは、文の切れ目で改める', r.lines.length, 2);
+
+r = run(`onSubmitDone({ ok: true }); cancelLater();
+         ({ text: successText.textContent })`);
+check('ふつうに登録したときは一言だけ', r, { text: '登録しました' });
+
+r = run(`onSubmitDone({ ok: true, queued: true }); cancelLater();
+         ({ lines: successText.textContent.split('\\n') })`);
+check('預かったときも文の切れ目で改める', r.lines.length, 2);
 
 console.log(failed ? ('\n' + failed + ' 件しくじりました') : '\nすべて通りました');
 process.exit(failed ? 1 : 0);

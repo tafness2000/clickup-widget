@@ -149,7 +149,7 @@ const PICKER_MAX = 60;
 // 触れば分かる、では済まない変わり方なので、開いた時点で書いておく。
 const PICKER_NOTES = {
   exclude: 'チェックを外したリストは、この一覧にも「最近登録したタスク」にも出なくなります',
-  user:    'Enter か Space で入り切り。絞り込みが空のとき Enter で決まります',
+  user:    'Enter か Space で入り切り。Esc か Tab で戻ります',
 };
 
 function searchFor(kind, q) {

@@ -510,11 +510,14 @@ function onSubmitDone(data) {
     // 一覧に他人ぶんも出るようになったのに、という食い違いに読める。
     // 預かった場合は触れない。まだ登録していないのだから、出ないのは当たり前で、
     // 言うべきは「まだ送れていない」ことの方。
+    // 改行は自分で決める（.success-text は white-space: pre-line）。
+    // 折り返しに任せると「担当の / ぶんだけを」のように語の途中で切れて、
+    // 一目で読めない。文の切れ目で改める。
     successText.textContent = data.queued
-      ? '接続できないため保存しました。つながり次第、登録します'
+      ? '接続できないため保存しました\nつながり次第、登録します'
       : data.away
-        ? `${awayText()}に振りました。`
-          + 'この一覧は自分が担当のぶんだけを出すので、ここには出ません'
+        ? `${awayText()}に振りました\n`
+          + '自分は担当ではないので、一覧には出ません'
         : '登録しました';
     formArea.style.display = 'none';
     successArea.style.display = 'flex';
@@ -564,21 +567,19 @@ document.addEventListener('keydown', e => {
       // 変換確定の Enter を決定と取り違えない。
       if (e.isComposing || e.keyCode === 229) return;
       e.preventDefault();
-      // 担当者だけは、Enter の行き先を絞り込み欄の中身で分ける。何人でも選べるので
-      // ひとりごとに閉じては用を成さないが、Enter で終われないのも手に馴染まない。
-      //
-      //   絞り込みに打ってある → その人を入れて、次を探せるよう欄を空にする
-      //   空                   → もう選び終わったとみて閉じる
-      //
-      // これで「たなか → Enter → さとう → Enter → Enter」と、手を離さずに終われる。
+      // 担当者の Enter は「選ぶ」だけで、閉じない。何人でも選べるので、
+      // ひとりごとに窓が引っ込んでは用を成さない。
+      // 閉じるのは Esc・Tab・外を押したとき。
       if (state.kind === 'user') {
-        if (!pickerSearch.value) { closePicker(true); return; }
         // 当たるものが無ければ何もしない。ここで欄まで空にすると、打ち間違いや
         // 変換し忘れのときに、誰も選べないうえ打ち直しになる。
         if (!state.rows.length) return;
         choose(state.active);
-        pickerSearch.value = '';
-        renderPicker();            // 空欄の並び（選んだ人が上に来る）へ組み直す
+        // 打ってあったぶんは流す。続けて次の人を名前で探せるようにするため。
+        if (pickerSearch.value) {
+          pickerSearch.value = '';
+          renderPicker();          // 空欄の並び（選んだ人が上に来る）へ組み直す
+        }
         return;
       }
       choose(state.active);
