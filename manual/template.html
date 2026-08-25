@@ -411,6 +411,13 @@ app / runtime / mingit / manual / .git など
   そのまま残ります。
 </p>
 
+<div class="note">
+  <strong>打ちかけたまま閉じても、消えません</strong>
+  打っている途中で <kbd>Esc</kbd> を押して引っ込めても、次に呼び出したときは打った内容がそのまま出てきます。
+  登録先・担当者・期限をいじってあれば、そちらも一緒に残ります。
+  登録し終われば片付くので、次はまっさらから始まります。
+</div>
+
 <!-- ══════════════════════════════════════════ -->
 <h2 id="targets">3. 登録先・担当者・期限を変える</h2>
 
@@ -418,7 +425,7 @@ app / runtime / mingit / manual / .git など
 
 <table>
   <tr><th>⌗ リスト</th><td>登録先のリスト（クリック または <kbd>Ctrl</kbd>+<kbd>L</kbd>）</td></tr>
-  <tr><th>@ 担当者</th><td>担当者（クリック または <kbd>Ctrl</kbd>+<kbd>U</kbd>）</td></tr>
+  <tr><th>@ 担当者</th><td>担当者（クリック または <kbd>Ctrl</kbd>+<kbd>U</kbd>）。<strong>何人でも選べます</strong></td></tr>
   <tr><th>◷ 期限</th><td>期限（クリック または <kbd>Ctrl</kbd>+<kbd>D</kbd>）</td></tr>
 </table>
 
@@ -434,17 +441,20 @@ app / runtime / mingit / manual / .git など
 </div>
 
 <ul>
-  <li>上下キーで選んで <kbd>Enter</kbd>、またはクリックで決まります</li>
+  <li>上下キーで選んで <kbd>Enter</kbd>、またはクリックで決まります
+      （担当者だけは選んでも閉じません。<a href="#multiuser">下記</a>）</li>
   <li>リストは名前だけでなく、<strong>入っているフォルダ名でも探せます</strong><br />
       例：「grand kyoto」で 2 件出たら、「hotel archive kyoto」で絞れます</li>
   <li>担当者は名前でもメールアドレスでも探せます</li>
+  <li>いま選んである担当者は、絞り込みを消すと<strong>いつも上のほうに出ます</strong>
+      （候補が多くても、選んだ人を見失わないようにするためです）</li>
   <li>リスト名も担当者名もアルファベットなので、パネルを開くと<strong>入力モードが自動で半角英数に切り替わります</strong></li>
   <li>やめるときは、パネルの外（上のあいたところ）をクリックするか <kbd>Esc</kbd></li>
 </ul>
 
 <div class="note">
   <strong>ここで変えるのは「今回だけ」です</strong>
-  次に呼び出したときは、また既定に戻ります。
+  次に呼び出したときは、また既定に戻ります（打ちかけを残したまま閉じたときだけは、選んだ先も一緒に残ります）。
   <strong>ふだんの入れ先そのもの</strong>を変えたいときは、行の右に出る <strong>⌂</strong> を押してください
   （<a href="#change">10. 設定を変えたいとき</a>）。
 </div>
@@ -458,6 +468,37 @@ app / runtime / mingit / manual / .git など
     <img src="{{IMG:pick-due}}" alt="期限を選ぶ" width="390" />
     <figcaption>期限（<kbd>Ctrl</kbd>+<kbd>D</kbd>）</figcaption>
   </figure>
+</div>
+
+<h3 id="multiuser">担当者は何人でも選べます</h3>
+
+<p>
+  ほかの 2 つと違って、<strong>担当者のパネルは選んでも閉じません。</strong>
+  続けて何人か入れられるようにするためです。行の右端の <strong>☑</strong> が、
+  いま担当に入っている人です。
+</p>
+
+<table>
+  <tr><th>名前を打って <kbd>Enter</kbd></th>
+      <td>その人を入れて、絞り込み欄が空になる（続けて次の人を探せます）</td></tr>
+  <tr><th>絞り込みが空で <kbd>Enter</kbd></th><td>決めて閉じる</td></tr>
+  <tr><th>上下キー＋<kbd>Space</kbd></th><td>光っている行の入り切り</td></tr>
+  <tr><th>クリック</th><td>同じく入り切り</td></tr>
+  <tr><th><kbd>Esc</kbd> ／ <kbd>Tab</kbd> ／ 外をクリック</th><td>決めて閉じる</td></tr>
+</table>
+
+<p>
+  つまり <kbd>Ctrl</kbd>+<kbd>U</kbd> →「suzuki」<kbd>Enter</kbd> →「tanaka」<kbd>Enter</kbd> →
+  <kbd>Enter</kbd> と、手を離さずに 2 人足して閉じられます。
+  チップには「Yamada +2」のように、先頭のひとりと残りの人数が出ます
+  （指を置くと全員の名前が出ます）。
+</p>
+
+<div class="note">
+  <strong>ひとりも居ない状態にはできません</strong>
+  最後のひとりを外そうとすると断られます。担当のいないタスクは、作った本人しか
+  在り処を知らないまま ClickUp のどこかに残ってしまうためです。
+  付け替えたいときは、<strong>先に新しい人を足してから</strong>外してください。
 </div>
 
 <h3>期限は 6 つから選べます</h3>
@@ -480,10 +521,30 @@ app / runtime / mingit / manual / .git など
     <p>
       <strong>変えた内容はその 1 回かぎりです。</strong>
       次に呼び出したときは、いつものリスト・自分・今日に戻ります。
+      ただし打ちかけを残したまま閉じたときは、選んだ先も一緒に残ります
+      （そこまで組んでから中断したのに、戻すと組み直しになるためです）。
     </p>
   </div>
   <figure>
     <img src="{{IMG:chips-changed}}" alt="既定から変えた状態" width="390" />
+  </figure>
+</div>
+
+<div class="step">
+  <div class="step-body">
+    <h3>自分が担当から外れると、枠の色が変わります</h3>
+    <p>
+      担当者から自分を外すと、担当者のところに<strong>琥珀色の枠</strong>が出ます。
+    </p>
+    <p>
+      <a href="#feed">最近登録したタスク</a>と<a href="#wide">広げた一覧</a>に出るのは、
+      <strong>自分が担当のものだけ</strong>です。自分を外して登録すると、
+      そのタスクは相手の手元には出ますが、<strong>こちらの一覧には出てきません。</strong>
+      押す前に気づけるよう枠で伝えて、登録したあとにももう一度お伝えします。
+    </p>
+  </div>
+  <figure>
+    <img src="{{IMG:chips-away}}" alt="自分が担当から外れている状態" width="390" />
   </figure>
 </div>
 
@@ -519,6 +580,16 @@ app / runtime / mingit / manual / .git など
   その場で別のリストへ入れた分もここに出るので、どこへ入れたか忘れても見失いません。
   いつものリスト以外のものは、2 行目にリスト名が付きます。
 </p>
+<p>
+  自分のほかにも担当者がいるタスクは、2 行目に <strong>@ 相手の名前</strong>が付きます。
+  何人かいるときは「@ Suzuki +2」のように畳みます（指を置くと全員出ます）。
+</p>
+
+<div class="note">
+  <strong>ここに出るのは「自分が担当のもの」だけです</strong>
+  担当者から自分を外して登録したものは、ここにも<a href="#wide">広げた一覧</a>にも出てきません。
+  相手の手元には出ています（<a href="#targets">3. 登録先・担当者・期限を変える</a>）。
+</div>
 
 <table>
   <tr><th>行をクリック</th><td>ClickUp でそのタスクを開く</td></tr>

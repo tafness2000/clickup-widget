@@ -64,7 +64,7 @@ FEED = [
     {'id': 't1', 'name': '見積書のチェック待ち', 'url': '', 'list_id': 'p1',
      'list_name': 'Yamada', 'memo': '見積書_日本橋案件.xlsx - Excel'},
     {'id': 't2', 'name': '田中さんの返事待ち', 'url': '', 'list_id': 's1',
-     'list_name': 'Sales Activity', 'memo': ''},
+     'list_name': 'Sales Activity', 'memo': '', 'others': ['Suzuki Hanako']},
     {'id': 't3', 'name': '図面の差し替え分を確認', 'url': '', 'list_id': 'p1',
      'list_name': 'Yamada', 'memo': '第3版_20260804.pdf'},
 ]
@@ -82,13 +82,15 @@ WIDE = [
     {'id': 'w1', 'name': '見積書のチェック待ち', 'url': '', 'list_id': 'p1',
      'list_name': 'Yamada', 'memo': '見積書_日本橋案件.xlsx - Excel', 'status': 'to do', 'due': _due(0)},
     {'id': 'w2', 'name': '田中さんの返事待ち', 'url': '', 'list_id': 's1',
-     'list_name': 'Sales Activity', 'memo': '', 'status': 'to do', 'due': _due(0)},
+     'list_name': 'Sales Activity', 'memo': '', 'status': 'to do', 'due': _due(0),
+     'others': ['Suzuki Hanako']},
     {'id': 'w3', 'name': '図面の差し替え分を確認', 'url': '', 'list_id': 'p1',
      'list_name': 'Yamada', 'memo': '第3版_20260804.pdf', 'status': 'to do', 'due': _due(-1)},
     {'id': 'w4', 'name': '発注書の押印をもらう', 'url': '', 'list_id': 'h1',
      'list_name': 'Grand Hotel Tokyo', 'memo': '', 'status': 'to do', 'due': _due(-4)},
     {'id': 'w5', 'name': '現地調査の日程を決める', 'url': '', 'list_id': 'h2',
-     'list_name': 'Grand Hotel Kyoto', 'memo': '先方の都合待ち', 'status': 'to do', 'due': _due(-8)},
+     'list_name': 'Grand Hotel Kyoto', 'memo': '先方の都合待ち', 'status': 'to do', 'due': _due(-8),
+     'others': ['Suzuki Hanako', 'Chris Baker']},
     {'id': 'w6', 'name': '仕様書のレビュー', 'url': '', 'list_id': 's2',
      'list_name': 'Product Backlog', 'memo': '', 'status': 'to do', 'due': _due(2)},
     {'id': 'w7', 'name': '見積の再提出', 'url': '', 'list_id': 'h4',
@@ -212,7 +214,9 @@ def shot_pick_list_search():
 
 
 def shot_pick_user():
-    js('closePicker(false); openPicker("user");')
+    js('closePicker(false);'
+       'pickedUsers = [SELF, DIR.members[1]]; renderTargets();'
+       'openPicker("user");')
     grab('pick-user', shot_pick_due)
 
 
@@ -223,9 +227,18 @@ def shot_pick_due():
 
 def shot_chips_changed():
     js('closePicker(false);'
-       'pickedList = DIR.lists[3]; pickedUser = DIR.members[1];'
+       'pickedList = DIR.lists[3]; pickedUsers = [SELF, DIR.members[1]];'
        'pickedDue = DUE_PRESETS[3]; renderTargets();')
-    grab('chips-changed', shot_update_chip)
+    grab('chips-changed', shot_chips_away)
+
+
+def shot_chips_away():
+    """自分が担当から外れている状態。琥珀の枠が出る。
+
+    このまま登録すると手元の一覧には出てこないので、説明書でも 1 枚使って伝える。
+    """
+    js('pickedUsers = [DIR.members[1], DIR.members[3]]; renderTargets();')
+    grab('chips-away', shot_update_chip)
 
 
 # ── 新しい版のお知らせ ────────────────────────────────────────
