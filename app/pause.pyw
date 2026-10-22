@@ -299,6 +299,8 @@ def _build_window() -> tuple[HideOnCloseWindow, QWebEngineView, bool]:
     view = QWebEngineView()
     # 読み込み中に白が一瞬見えないよう、下地を板の色に合わせておく。
     view.page().setBackgroundColor(QColor('#141416'))
+    # 文字の大きさ。CSS は等倍のままで、ここで丸ごと引き伸ばす（layout.ZOOM）。
+    view.setZoomFactor(layout.ZOOM)
     win.setCentralWidget(view)
 
     crashes, last_crash = 0, 0.0

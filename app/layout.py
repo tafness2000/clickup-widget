@@ -6,16 +6,39 @@
 from PyQt6.QtGui import QCursor
 from PyQt6.QtWidgets import QApplication, QMainWindow
 
+# 画面の文字の大きさ。
+#
+# CSS は等倍（px の直書き）のままにして、表示するときに丸ごと引き伸ばす。
+# ui.css の font-size は 40 か所あり、そこだけ 1.5 倍にすると、高さを固定してある
+# ところ（入力欄 34px・チップ 30px・候補パネル 328px・一覧 124px）との辻褄が合わず
+# 必ずどこかが溢れる。倍率でまとめて動かせば、文字も余白も枠もチェックの升目も
+# 同じ比率で大きくなるので、組み方を一切触らずに済む。
+#
+# 窓の寸法もこの率で膨らませる。ここを変えれば画面と窓が一緒に付いてくる。
+ZOOM = 1.5
+
+# 素の寸法（ZOOM が 1.0 のときの大きさ）。
 # 396 = 従来の 359 + 登録先の行 30px + 余白 7px。
-WIN_W, WIN_H = 390, 396
+BASE_W, BASE_H = 390, 396
 
 # 初回設定は手順を載せるぶん大きく取り、画面の中央に出す。
 # 隅に小さく出ると、初めての人が見落とすため。
-SETUP_W, SETUP_H = 430, 486
+BASE_SETUP_W, BASE_SETUP_H = 430, 486
 
 # 一覧を広げたときの高さ。画面が狭ければ作業領域に合わせて縮める。
-WIDE_H_MAX = 660
+BASE_WIDE_H_MAX = 660
 
+
+def scaled(value: int) -> int:
+    """素の寸法を、いまの文字の大きさに合わせた画素数にする。"""
+    return round(value * ZOOM)
+
+
+WIN_W,   WIN_H   = scaled(BASE_W), scaled(BASE_H)
+SETUP_W, SETUP_H = scaled(BASE_SETUP_W), scaled(BASE_SETUP_H)
+WIDE_H_MAX       = scaled(BASE_WIDE_H_MAX)
+
+# 画面の隅からの距離。窓の外の話なので、文字の大きさには連れない。
 MARGIN = 12
 
 

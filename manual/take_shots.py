@@ -160,6 +160,8 @@ win = QMainWindow()
 win.setWindowFlags(Qt.WindowType.FramelessWindowHint | Qt.WindowType.Tool)
 view = QWebEngineView()
 view.page().setBackgroundColor(QColor('#141416'))
+# 本編と同じ文字の大きさで撮る。ここを忘れると、説明書だけ昔の小さい画面になる。
+view.setZoomFactor(layout.ZOOM)
 win.setCentralWidget(view)
 
 stub    = Stub()
