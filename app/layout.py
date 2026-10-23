@@ -9,13 +9,13 @@ from PyQt6.QtWidgets import QApplication, QMainWindow
 # 画面の文字の大きさ。
 #
 # CSS は等倍（px の直書き）のままにして、表示するときに丸ごと引き伸ばす。
-# ui.css の font-size は 40 か所あり、そこだけ 1.5 倍にすると、高さを固定してある
+# ui.css の font-size は 40 か所あり、そこだけ大きくすると、高さを固定してある
 # ところ（入力欄 34px・チップ 30px・候補パネル 328px・一覧 124px）との辻褄が合わず
 # 必ずどこかが溢れる。倍率でまとめて動かせば、文字も余白も枠もチェックの升目も
 # 同じ比率で大きくなるので、組み方を一切触らずに済む。
 #
 # 窓の寸法もこの率で膨らませる。ここを変えれば画面と窓が一緒に付いてくる。
-ZOOM = 1.5
+ZOOM = 1.25
 
 # 素の寸法（ZOOM が 1.0 のときの大きさ）。
 # 396 = 従来の 359 + 登録先の行 30px + 余白 7px。
@@ -25,9 +25,6 @@ BASE_W, BASE_H = 390, 396
 # 隅に小さく出ると、初めての人が見落とすため。
 BASE_SETUP_W, BASE_SETUP_H = 430, 486
 
-# 一覧を広げたときの高さ。画面が狭ければ作業領域に合わせて縮める。
-BASE_WIDE_H_MAX = 660
-
 
 def scaled(value: int) -> int:
     """素の寸法を、いまの文字の大きさに合わせた画素数にする。"""
@@ -36,7 +33,6 @@ def scaled(value: int) -> int:
 
 WIN_W,   WIN_H   = scaled(BASE_W), scaled(BASE_H)
 SETUP_W, SETUP_H = scaled(BASE_SETUP_W), scaled(BASE_SETUP_H)
-WIDE_H_MAX       = scaled(BASE_WIDE_H_MAX)
 
 # 画面の隅からの距離。窓の外の話なので、文字の大きさには連れない。
 MARGIN = 12
@@ -62,11 +58,15 @@ def work_area_logical() -> tuple[int, int, int, int]:
 
 
 def view_size(wide: bool) -> tuple[int, int]:
-    """入力画面のときと、一覧を広げたときの大きさ。"""
+    """入力画面のときと、一覧を広げたときの大きさ。
+
+    広げたときは作業領域の上下いっぱいまで伸ばす。一度に見えるタスクの数を
+    できるだけ多くしたいので、上限は設けない。
+    """
     if not wide:
         return WIN_W, WIN_H
     _wl, wt, _wr, wb = work_area_logical()
-    return WIN_W, min(WIDE_H_MAX, (wb - wt) - MARGIN * 2)
+    return WIN_W, (wb - wt) - MARGIN * 2
 
 
 def position_window(win: QMainWindow, w: int, h: int, center: bool = False) -> None:
