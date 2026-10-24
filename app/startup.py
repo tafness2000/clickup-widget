@@ -142,9 +142,12 @@ def enable_watchdog(register_script: str) -> tuple[bool, str]:
 
 
 def disable_watchdog() -> tuple[bool, str]:
+    """見張り役を外す。もともと無ければ何もせず成功する（自動起動の外し方と揃える）。"""
     return _powershell(['-Command',
-                        f"Unregister-ScheduledTask -TaskName '{TASK_NAME}' "
-                        "-Confirm:$false -ErrorAction Stop"])
+                        "if (Get-ScheduledTask -TaskName $env:PT_TASK -ErrorAction SilentlyContinue) "
+                        "{ Unregister-ScheduledTask -TaskName $env:PT_TASK "
+                        "-Confirm:$false -ErrorAction Stop }"],
+                       {'PT_TASK': TASK_NAME})
 
 
 def watchdog_command() -> str:
@@ -177,6 +180,36 @@ def enable_all() -> tuple[bool, str]:
         return True, '見張り役の登録だけできませんでした（自動起動は有効です）'
     appconfig.log('自動起動とウォッチドッグを登録しました')
     return True, ''
+
+
+def disable_all() -> tuple[bool, str]:
+    """自動起動とウォッチドッグをまとめて外す。
+
+    片方だけでは切れない。自動起動だけ外しても、見張り役がサインインの 2 分後と
+    5 分ごとに起こしてしまう。
+
+    いまの登録を確かめてから外すことはしない。確かめる側（PowerShell）がつまずくと
+    「無い」と読めてしまい、残ったまま外せたと答えることになる。どちらの外し方も、
+    もともと無ければ何もせず成功するので、両方そのまま試す。
+    """
+    link_ok, link_out = disable_autostart()
+    task_ok, task_out = disable_watchdog()
+    if not link_ok:
+        appconfig.log(f'警告: 自動起動を外せませんでした ({link_out})')
+    if not task_ok:
+        appconfig.log(f'警告: ウォッチドッグを外せませんでした ({task_out})')
+    if link_ok and task_ok:
+        appconfig.log('自動起動とウォッチドッグを外しました')
+        return True, ''
+    return False, '外せなかったものがあります（ログに理由を残しました）'
+
+
+def status() -> dict:
+    """いま登録されているか。真実は OS 側（スタートアップの .lnk とタスク）にある。
+
+    PowerShell を 2 回呼ぶので 1〜2 秒かかる。GUI スレッドから呼ばないこと。
+    """
+    return {'autostart': bool(autostart_link()[0]), 'watchdog': bool(watchdog_command())}
 
 
 # ── 引っ越しへの追従 ─────────────────────────────────────────

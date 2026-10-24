@@ -91,6 +91,7 @@ def fill_names(cfg: dict, data: dict) -> dict:
 def build_payload(cfg: dict, data: dict) -> dict:
     """ui.html の setDirectory に渡す形に整える。"""
     import appconfig      # 呼ばれるのはここだけ。読み込み順の縛りを作らないよう中で import する
+    import prefs
 
     return {
         'lists':        data.get('lists', []),
@@ -105,4 +106,5 @@ def build_payload(cfg: dict, data: dict) -> dict:
         'favorites':   appconfig.favorites(cfg),
         'default_due': cfg.get('default_due_preset') or 'today',
         'excluded':    appconfig.excluded_lists(cfg),
+        'wide_scope':  prefs.wide_scope_of(cfg),
     }

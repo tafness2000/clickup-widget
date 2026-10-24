@@ -28,6 +28,7 @@ from PyQt6.QtWebEngineWidgets import QWebEngineView
 from PyQt6.QtWidgets import QApplication, QMainWindow
 
 import layout
+import prefs
 
 # ── 説明書に載せる架空のデータ ────────────────────────────────
 
@@ -153,6 +154,36 @@ class Stub(QObject):
     def appFolder(self): return r'C:\Tools\ClickUpWidget'   # 説明書に載せる架空のパス
 
 
+class SettingsStub(QObject):
+    """設定画面の窓口（settings_bridge.py）の代わり。何も保存しない。"""
+
+    @pyqtSlot(result=str)
+    def loadSettings(self):
+        return json.dumps({'ok': True, 'zoom': layout.current_zoom(),
+                           'zoom_steps': list(prefs.ZOOM_STEPS),
+                           'corner': 'bottom-right', 'wide_scope': 'today',
+                           'hotkey': {'mods': ['ctrl', 'shift'], 'vk': 32,
+                                      'label': 'Ctrl+Shift+Space', 'fell_back': False}})
+
+    @pyqtSlot()
+    def loadAutostart(self): pass
+
+    @pyqtSlot(bool)
+    def setAutostart(self, on): pass
+
+    @pyqtSlot(str, result=str)
+    def setZoom(self, v): return json.dumps({'ok': True, 'zoom': float(v)})
+
+    @pyqtSlot(str, result=str)
+    def setCorner(self, v): return json.dumps({'ok': True, 'corner': v})
+
+    @pyqtSlot(str, result=str)
+    def setWideScope(self, v): return json.dumps({'ok': True, 'wide_scope': v})
+
+    @pyqtSlot(str, int, result=str)
+    def setHotkey(self, *a): return json.dumps({'ok': False, 'error': ''})
+
+
 app = QApplication(sys.argv)
 app.setQuitOnLastWindowClosed(False)
 
@@ -161,12 +192,14 @@ win.setWindowFlags(Qt.WindowType.FramelessWindowHint | Qt.WindowType.Tool)
 view = QWebEngineView()
 view.page().setBackgroundColor(QColor('#141416'))
 # 本編と同じ文字の大きさで撮る。ここを忘れると、説明書だけ昔の小さい画面になる。
-view.setZoomFactor(layout.ZOOM)
+view.setZoomFactor(layout.current_zoom())
 win.setCentralWidget(view)
 
-stub    = Stub()
-channel = QWebChannel()
+stub     = Stub()
+settings = SettingsStub()
+channel  = QWebChannel()
 channel.registerObject('bridge', stub)
+channel.registerObject('settings', settings)
 view.page().setWebChannel(channel)
 
 shots = []
@@ -189,7 +222,7 @@ def grab(name, then, wait=700):
 
 def start_main(_ok=None):
     view.loadFinished.disconnect(start_main)
-    win.setFixedSize(layout.WIN_W, layout.WIN_H)
+    win.setFixedSize(*layout.win_size())
     win.show()
     js(f'setDirectory({json.dumps(DIRECTORY, ensure_ascii=True)});'
        'resetForm("見積書_日本橋案件.xlsx - Excel");'
@@ -324,7 +357,28 @@ def shot_wide_exclude():
        'WIDE_TASKS = WIDE_TASKS.filter(t => !EXCLUDED.includes(String(t.list_id)));'
        'renderWide();'
        'openPicker("exclude");')
-    grab('wide-exclude', close_and_load_setup)
+    grab('wide-exclude', shot_settings)
+
+
+# ── 設定 ──────────────────────────────────────────────────────
+
+def shot_settings():
+    js('closePicker(false); closeWide();')
+    win.setFixedSize(*layout.win_size())
+    js('openSettings();'
+       'onAutostartState({ok: true, autostart: true, watchdog: true, note: ""});')
+    grab('settings', shot_settings_hotkey)
+
+
+def shot_settings_hotkey():
+    """呼び出すキーを待ち受けているところ。"""
+    js('startRecording();')
+    grab('settings-hotkey', close_settings_and_load_setup)
+
+
+def close_settings_and_load_setup():
+    js('closeSettings();')
+    QTimer.singleShot(300, close_and_load_setup)
 
 
 def close_and_load_setup():
@@ -340,7 +394,7 @@ def close_and_load_setup():
 # ── 初回設定 ──────────────────────────────────────────────────
 
 def load_setup():
-    win.setFixedSize(layout.SETUP_W, layout.SETUP_H)
+    win.setFixedSize(*layout.setup_size())
     view.loadFinished.connect(start_setup)
     view.load(QUrl.fromLocalFile(os.path.join(APP_DIR, 'setup.html')))
 

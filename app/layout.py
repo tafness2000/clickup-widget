@@ -6,7 +6,9 @@
 from PyQt6.QtGui import QCursor
 from PyQt6.QtWidgets import QApplication, QMainWindow
 
-# 画面の文字の大きさ。
+import prefs
+
+# 画面の文字の大きさ。設定画面で段階から選ぶ（prefs.ZOOM_STEPS）。
 #
 # CSS は等倍（px の直書き）のままにして、表示するときに丸ごと引き伸ばす。
 # ui.css の font-size は 40 か所あり、そこだけ大きくすると、高さを固定してある
@@ -14,10 +16,13 @@ from PyQt6.QtWidgets import QApplication, QMainWindow
 # 必ずどこかが溢れる。倍率でまとめて動かせば、文字も余白も枠もチェックの升目も
 # 同じ比率で大きくなるので、組み方を一切触らずに済む。
 #
-# 窓の寸法もこの率で膨らませる。ここを変えれば画面と窓が一緒に付いてくる。
-ZOOM = 1.25
+# 窓の寸法もこの率で膨らませる。倍率と隅は動かしている間に変わるので定数にせず、
+# 起動時と設定を変えたときに set_zoom / set_corner で入れ替える。
+# ここでは config.json を読まない。take_shots.py が設定ファイル無しで使うため。
+_zoom   = prefs.DEFAULT_ZOOM
+_corner = prefs.DEFAULT_CORNER
 
-# 素の寸法（ZOOM が 1.0 のときの大きさ）。
+# 素の寸法（倍率が 1.0 のときの大きさ）。
 # 396 = 従来の 359 + 登録先の行 30px + 余白 7px。
 BASE_W, BASE_H = 390, 396
 
@@ -26,13 +31,38 @@ BASE_W, BASE_H = 390, 396
 BASE_SETUP_W, BASE_SETUP_H = 430, 486
 
 
-def scaled(value: int) -> int:
-    """素の寸法を、いまの文字の大きさに合わせた画素数にする。"""
-    return round(value * ZOOM)
+def set_zoom(zoom: float) -> None:
+    global _zoom
+    _zoom = zoom
 
 
-WIN_W,   WIN_H   = scaled(BASE_W), scaled(BASE_H)
-SETUP_W, SETUP_H = scaled(BASE_SETUP_W), scaled(BASE_SETUP_H)
+def current_zoom() -> float:
+    return _zoom
+
+
+def set_corner(corner: str) -> None:
+    global _corner
+    _corner = corner if corner in prefs.CORNERS else prefs.DEFAULT_CORNER
+
+
+def current_corner() -> str:
+    return _corner
+
+
+def scaled(value: int, zoom: float | None = None) -> int:
+    """素の寸法を、文字の大きさに合わせた画素数にする。"""
+    return round(value * (_zoom if zoom is None else zoom))
+
+
+def win_size() -> tuple[int, int]:
+    """入力画面の大きさ。"""
+    return scaled(BASE_W), scaled(BASE_H)
+
+
+def setup_size() -> tuple[int, int]:
+    """初回設定の大きさ。"""
+    return scaled(BASE_SETUP_W), scaled(BASE_SETUP_H)
+
 
 # 画面の隅からの距離。窓の外の話なので、文字の大きさには連れない。
 MARGIN = 12
@@ -63,15 +93,26 @@ def view_size(wide: bool) -> tuple[int, int]:
     広げたときは作業領域の上下いっぱいまで伸ばす。一度に見えるタスクの数を
     できるだけ多くしたいので、上限は設けない。
     """
+    w, h = win_size()
     if not wide:
-        return WIN_W, WIN_H
+        return w, h
     _wl, wt, _wr, wb = work_area_logical()
-    return WIN_W, (wb - wt) - MARGIN * 2
+    return w, (wb - wt) - MARGIN * 2
+
+
+def corner_xy(corner: str, w: int, h: int,
+              area: tuple[int, int, int, int]) -> tuple[int, int]:
+    """作業領域 area（左・上・右・下）の隅に、w x h の窓を置くときの左上の座標。"""
+    left, top, right, bottom = area
+    x = left + MARGIN if corner.endswith('left') else right - w - MARGIN
+    y = top + MARGIN if corner.startswith('top') else bottom - h - MARGIN
+    return x, y
 
 
 def position_window(win: QMainWindow, w: int, h: int, center: bool = False) -> None:
-    wl, wt, wr, wb = work_area_logical()
+    area = work_area_logical()
     if center:
+        wl, wt, wr, wb = area
         win.move(wl + (wr - wl - w) // 2, wt + (wb - wt - h) // 2)
         return
-    win.move(wr - w - MARGIN, wb - h - MARGIN)
+    win.move(*corner_xy(_corner, w, h, area))

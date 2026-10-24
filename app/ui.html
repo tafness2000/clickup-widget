@@ -4,6 +4,7 @@
 <meta charset="UTF-8" />
 <title>Click Up Widget</title>
 <link rel="stylesheet" href="ui.css" />
+<link rel="stylesheet" href="settings.css" />
 </head>
 <body>
   <div id="pickerScrim"></div>
@@ -54,8 +55,12 @@
     <div class="feed">
       <div class="feed-head">
         <span id="feedTitle">最近登録したタスク</span>
-        <button class="feed-expand" id="expandBtn" type="button"
-                title="一覧を広げる（Ctrl+E）">広げる</button>
+        <div class="feed-actions">
+          <button class="feed-expand" id="settingsBtn" type="button"
+                  title="設定（Ctrl+,）">設定</button>
+          <button class="feed-expand" id="expandBtn" type="button"
+                  title="一覧を広げる（Ctrl+E）">広げる</button>
+        </div>
       </div>
       <div class="feed-body" id="feedBody">
         <div class="feed-note">読み込み中…</div>
@@ -90,6 +95,42 @@
     <div class="wide-foot" id="wideFoot"></div>
   </div>
 
+  <!-- 設定。入力画面と同じ大きさのまま中身だけ入れ替える。選んだ瞬間に効く。 -->
+  <div id="settingsArea">
+    <div class="settings-head">
+      <span class="settings-title">設定</span>
+      <button class="wide-icon" id="settingsBack" type="button" title="入力へ戻る（Esc）">✕</button>
+    </div>
+    <div class="settings-body">
+      <div class="settings-row">
+        <div class="settings-label">文字の大きさ</div>
+        <div class="settings-seg" id="setZoom"></div>
+      </div>
+      <div class="settings-row">
+        <div class="settings-label">窓を出す位置</div>
+        <div class="settings-seg" id="setCorner"></div>
+      </div>
+      <div class="settings-row">
+        <div class="settings-label">呼び出すキー</div>
+        <div class="settings-hotkey">
+          <kbd id="hotkeyLabel">—</kbd>
+          <button class="wide-tab" id="hotkeyChange" type="button">変更</button>
+        </div>
+        <div class="settings-note" id="hotkeyNote"></div>
+      </div>
+      <div class="settings-row">
+        <div class="settings-label">広げたときに最初に開くタブ</div>
+        <div class="settings-seg" id="setWideScope"></div>
+      </div>
+      <div class="settings-row">
+        <div class="settings-label">サインインしたら自動で立ち上げる</div>
+        <div class="settings-seg" id="setAutostart"></div>
+        <div class="settings-note" id="autostartNote"></div>
+      </div>
+    </div>
+    <div class="settings-foot" id="settingsMsg"></div>
+  </div>
+
   <div id="picker">
     <input class="picker-search" id="pickerSearch" type="text"
            autocomplete="off" spellcheck="false" placeholder="絞り込む…" />
@@ -114,5 +155,6 @@
   <script src="picker.js"></script>
   <script src="wide.js"></script>
   <script src="update.js"></script>
+  <script src="settings.js"></script>
 </body>
 </html>

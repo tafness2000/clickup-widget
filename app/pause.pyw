@@ -20,7 +20,7 @@ os.environ.setdefault(
 )
 os.environ.setdefault('QT_OPENGL', 'software')
 
-from PyQt6.QtCore import QUrl, QTimer, QAbstractNativeEventFilter, Qt
+from PyQt6.QtCore import QUrl, QTimer, Qt
 from PyQt6.QtWidgets import QApplication, QMainWindow
 from PyQt6.QtGui import QCloseEvent, QColor
 from PyQt6.QtWebEngineWidgets import QWebEngineView
@@ -37,13 +37,15 @@ import backdrop
 import directory
 import feeds
 import gitupdate
+import hotkey
 import layout
+import prefs
 import startup
 # BASE は appconfig.BASE として都度読む。from import で束縛すると、
 # 置き場所を差し替えて動かすとき（テストなど）にここだけ古い値を掴んでしまう。
 from appconfig import bundled, is_setup_complete, load_config, log
 from bridge import Bridge
-from layout import SETUP_H, SETUP_W, WIN_H, WIN_W
+from settings_bridge import SettingsBridge
 
 # 未送信分を送り直す間隔。
 FLUSH_INTERVAL_MS = 5 * 60 * 1000
@@ -58,13 +60,6 @@ REALIGN_DELAY_MS = 1500
 # 読み直しても同じことなので、そこで諦める（落ちる → 読み直す、を延々繰り返さない）。
 RENDER_RELOAD_MAX     = 3
 RENDER_RELOAD_RESET_S = 60      # これだけ間が空いていれば、落ち着いたものとして数え直す
-
-HOTKEY_ID = 1
-MOD_CTRL  = 0x0002
-MOD_SHIFT = 0x0004
-VK_SPACE  = 0x20
-WM_HOTKEY = 0x0312
-
 
 def _log_uncaught(exc_type, exc_value, exc_tb) -> None:
     log('FATAL ' + ''.join(traceback.format_exception(exc_type, exc_value, exc_tb)).strip())
@@ -91,19 +86,8 @@ def _release_single_instance(handle) -> None:
         _kernel32.CloseHandle(handle)
 
 
-# ── Win32 ホットキー ──────────────────────────────────────────
-
+# 手前のウィンドウの名前を取るのに使う。ホットキーの登録は hotkey.py にある。
 _user32 = ctypes.WinDLL('user32', use_last_error=True)
-
-
-def register_hotkey() -> tuple[bool, int]:
-    """(登録できたか, 失敗時の Win32 エラーコード) を返す。"""
-    ok = bool(_user32.RegisterHotKey(None, HOTKEY_ID, MOD_CTRL | MOD_SHIFT, VK_SPACE))
-    return ok, (0 if ok else ctypes.get_last_error())
-
-
-def unregister_hotkey() -> None:
-    _user32.UnregisterHotKey(None, HOTKEY_ID)
 
 
 # このアプリの名前。ウィンドウのタイトルに使う。
@@ -148,19 +132,6 @@ def foreground_window_title(exclude_hwnd: int) -> str:
     _user32.GetWindowTextW(hwnd, buf, length + 1)
     title = buf.value.strip()
     return '' if title in IGNORED_TITLES else trim_context(title)
-
-
-class HotkeyFilter(QAbstractNativeEventFilter):
-    def __init__(self, on_press):
-        super().__init__()
-        self._on_press = on_press
-
-    def nativeEventFilter(self, event_type, message):
-        if event_type == b'windows_generic_MSG':
-            msg = ctypes.wintypes.MSG.from_address(int(message))
-            if msg.message == WM_HOTKEY and msg.wParam == HOTKEY_ID:
-                self._on_press()
-        return False, 0
 
 
 # ── ウィンドウの外観（角丸・すりガラス） ──────────────────────
@@ -252,8 +223,7 @@ def show_window(win: HideOnCloseWindow, view: QWebEngineView, feed: feeds.TaskFe
 
     cfg   = load_config()
     ready = is_setup_complete(cfg)
-    w = WIN_W if ready else SETUP_W
-    h = WIN_H if ready else SETUP_H
+    w, h  = layout.win_size() if ready else layout.setup_size()
     win.setFixedSize(w, h)
     layout.position_window(win, w, h, center=not ready)
 
@@ -270,17 +240,24 @@ def show_window(win: HideOnCloseWindow, view: QWebEngineView, feed: feeds.TaskFe
     log('呼び出されました')
 
 
-def _install_hotkey(app: QApplication, win: HideOnCloseWindow,
-                    view: QWebEngineView, feed: feeds.TaskFeed) -> HotkeyFilter:
-    """ホットキーを登録する。戻り値は GC されないよう呼び出し側で保持すること。"""
-    ok, err = register_hotkey()
+def _install_hotkey(app: QApplication, manager: hotkey.Manager, win: HideOnCloseWindow,
+                    view: QWebEngineView, feed: feeds.TaskFeed) -> hotkey.HotkeyFilter:
+    """ホットキーを登録する。戻り値は GC されないよう呼び出し側で保持すること。
+
+    保存してあったキーが取れなければ既定（Ctrl+Shift+Space）に戻す（Manager.start）。
+    """
+    saved   = hotkey.spec_of(load_config())
+    ok, err = manager.start(saved)
     if ok:
-        log('起動しました（ホットキー Ctrl+Shift+Space 登録済み）')
+        log(f'起動しました（ホットキー {hotkey.label(saved)} 登録済み）')
+    elif manager.fell_back:
+        log(f'警告: ホットキー {hotkey.label(saved)} を登録できなかったため、'
+            f'{hotkey.label(hotkey.DEFAULT)} に戻しました (Win32 error={err})')
     else:
-        log('警告: ホットキー Ctrl+Shift+Space の登録に失敗しました '
+        log(f'警告: ホットキー {hotkey.label(saved)} の登録に失敗しました '
             f'(Win32 error={err} / 1409 は他のアプリが占有中)')
 
-    filt = HotkeyFilter(lambda: show_window(win, view, feed))
+    filt = hotkey.HotkeyFilter(manager, lambda: show_window(win, view, feed))
     app.installNativeEventFilter(filt)
     return filt
 
@@ -293,14 +270,13 @@ def _build_window() -> tuple[HideOnCloseWindow, QWebEngineView, bool]:
     win = HideOnCloseWindow()
     win.setWindowTitle(APP_TITLE)
     win.setWindowFlags(Qt.WindowType.FramelessWindowHint | Qt.WindowType.Tool)
-    win.setFixedSize(SETUP_W if initial_setup else WIN_W,
-                     SETUP_H if initial_setup else WIN_H)
+    win.setFixedSize(*(layout.setup_size() if initial_setup else layout.win_size()))
 
     view = QWebEngineView()
     # 読み込み中に白が一瞬見えないよう、下地を板の色に合わせておく。
     view.page().setBackgroundColor(QColor('#141416'))
-    # 文字の大きさ。CSS は等倍のままで、ここで丸ごと引き伸ばす（layout.ZOOM）。
-    view.setZoomFactor(layout.ZOOM)
+    # 文字の大きさ。CSS は等倍のままで、ここで丸ごと引き伸ばす（設定画面で変えられる）。
+    view.setZoomFactor(layout.current_zoom())
     win.setCentralWidget(view)
 
     crashes, last_crash = 0, 0.0
@@ -328,13 +304,15 @@ def _build_window() -> tuple[HideOnCloseWindow, QWebEngineView, bool]:
     return win, view, initial_setup
 
 
-def _connect_bridge(win: HideOnCloseWindow, view: QWebEngineView) -> tuple[Bridge, QWebChannel]:
+def _connect_bridge(win: HideOnCloseWindow, view: QWebEngineView,
+                    manager: hotkey.Manager) -> tuple[Bridge, SettingsBridge, QWebChannel]:
     """画面からの窓口をつなぐ。
 
-    戻り値は両方とも呼び出し側で持ち続けること。Python 側の参照が切れると
+    戻り値は 3 つとも呼び出し側で持ち続けること。Python 側の参照が切れると
     回収されて、画面から呼んだ瞬間に落ちる。
     """
     web_bridge = Bridge(win, view)
+    settings   = SettingsBridge(win, view, manager)
     # 通信を伴うものの返事は、すべて Bridge の側から届く（押した瞬間に返るのは
     # 「受け付けた」だけで、中身は裏で走っている）。
     for signal, name in (
@@ -344,13 +322,15 @@ def _connect_bridge(win: HideOnCloseWindow, view: QWebEngineView) -> tuple[Bridg
         (web_bridge.taskCompleted,   'onTaskCompleted'),
         (web_bridge.taskRescheduled, 'onTaskRescheduled'),
         (web_bridge.updateStarted,   'onUpdateStarted'),
+        (settings.autostartState,    'onAutostartState'),
     ):
         signal.connect(lambda payload, fn=name: view.page().runJavaScript(
             f'typeof {fn}==="function" && {fn}({payload})'))
     channel = QWebChannel()
     channel.registerObject('bridge', web_bridge)
+    channel.registerObject('settings', settings)
     view.page().setWebChannel(channel)
-    return web_bridge, channel
+    return web_bridge, settings, channel
 
 
 def _connect_feeds(view: QWebEngineView):
@@ -424,6 +404,13 @@ def _realign_async() -> None:
     threading.Thread(target=work, daemon=True).start()
 
 
+def _apply_saved_layout() -> None:
+    """窓を組む前に、保存してある文字の大きさと隅を当てておく。"""
+    cfg = load_config()
+    layout.set_zoom(prefs.zoom_of(cfg))
+    layout.set_corner(prefs.corner_of(cfg))
+
+
 def main() -> None:
     sys.excepthook = _log_uncaught
 
@@ -436,9 +423,12 @@ def main() -> None:
 
     app = QApplication(sys.argv)
     app.setQuitOnLastWindowClosed(False)
+    _apply_saved_layout()
 
+    hotkeys = hotkey.Manager()
     win, view, initial_setup = _build_window()
-    web_bridge, channel = _connect_bridge(win, view)   # noqa: F841  GC 防止のため保持する
+    # GC 防止のため 3 つとも保持する
+    web_bridge, settings, channel = _connect_bridge(win, view, hotkeys)  # noqa: F841
 
     view.load(QUrl.fromLocalFile(bundled('setup.html' if initial_setup else 'ui.html')))
     apply_rounded_corners(win)
@@ -447,11 +437,11 @@ def main() -> None:
     view.loadFinished.connect(
         lambda ok: _on_page_ready(view, directory_feed) if ok else None)
 
-    filt = _install_hotkey(app, win, view, feed)       # noqa: F841  同上
+    filt = _install_hotkey(app, hotkeys, win, view, feed)   # noqa: F841  同上
 
     def _cleanup() -> None:
         log('終了します')
-        unregister_hotkey()
+        hotkeys.release()
         _release_single_instance(mutex_handle)
 
     app.aboutToQuit.connect(_cleanup)

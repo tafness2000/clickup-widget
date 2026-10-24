@@ -44,9 +44,11 @@ UNDO_FILES    = ['自動起動を解除する.bat', 'ウォッチドッグを解
 # 常駐そのもの。__pycache__ は持っていかない。
 APP_FILES = [
     'pause.pyw', 'updater.pyw',
-    'appconfig.py', 'bridge.py', 'clickup_api.py', 'directory.py', 'feeds.py',
-    'gitupdate.py', 'ime.py', 'layout.py', 'outbox.py', 'secretstore.py', 'startup.py',
+    'appconfig.py', 'backdrop.py', 'bridge.py', 'clickup_api.py', 'directory.py', 'feeds.py',
+    'gitupdate.py', 'hotkey.py', 'ime.py', 'layout.py', 'outbox.py', 'prefs.py',
+    'secretstore.py', 'settings_bridge.py', 'startup.py',
     'ui.html', 'ui.css', 'ui.js', 'picker.js', 'wide.js', 'update.js', 'setup.html',
+    'settings.js', 'settings.css',
     'watchdog.ps1', 'watchdog.vbs', 'register-watchdog.ps1',
 ]
 

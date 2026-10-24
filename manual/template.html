@@ -606,7 +606,8 @@ app / runtime / mingit / manual / .git など
 
 <p>
   「最近登録したタスク」の右にある <strong>「広げる」</strong>（または <kbd>Ctrl</kbd>+<kbd>E</kbd>）を押すと、
-  ウィンドウが縦に伸びて一覧だけの画面になります。入力欄はいったん畳まれます。
+  ウィンドウが画面の上下いっぱいまで伸びて、一覧だけの画面になります。入力欄はいったん畳まれます。
+  はじめに開くタブは「今日」です（<a href="#settings">設定画面</a>で変えられます）。
 </p>
 
 <div class="shots">
@@ -840,7 +841,12 @@ app / runtime / mingit / manual / .git など
 </p>
 
 <h3>やめたいとき</h3>
-<p>フォルダの中の「設定を解除するとき」を開き、次のどちらかをダブルクリックしてください。</p>
+<p>
+  <a href="#settings">設定画面</a>の「サインインしたら自動で立ち上げる」を <strong>オフ</strong> にしてください。
+  自動起動と見張り役がまとめて外れます（片方だけ外しても、もう片方が立ち上げてしまうためです）。
+  もう一度 <strong>オン</strong> にすれば両方とも戻ります。
+</p>
+<p>アプリが起動できないときは、フォルダの中の「設定を解除するとき」を開き、次のどちらかをダブルクリックしてください。</p>
 <ul>
   <li><code>自動起動を解除する.bat</code> … サインイン時の自動起動をやめる</li>
   <li><code>ウォッチドッグを解除する.bat</code> … 見張り役をやめる</li>
@@ -848,6 +854,47 @@ app / runtime / mingit / manual / .git など
 
 <!-- ══════════════════════════════════════════ -->
 <h2 id="change">10. 設定を変えたいとき</h2>
+
+<h3 id="settings">設定画面</h3>
+
+<div class="step">
+  <div class="step-body">
+    <p>
+      「最近登録したタスク」の右にある <strong>「設定」</strong>（または <kbd>Ctrl</kbd>+<kbd>,</kbd>）で開きます。
+      <strong>押した瞬間に変わり、そのまま覚えます</strong>（保存ボタンはありません）。
+      <kbd>Esc</kbd> か ✕ で入力画面へ戻ります。
+    </p>
+    <table>
+      <tr><th>文字の大きさ</th><td>100%〜150% の 5 段階。ウィンドウも同じ割合で大きくなります</td></tr>
+      <tr><th>窓を出す位置</th><td>右下・右上・左下・左上（最初の設定画面だけは、見落とさないよう中央に出ます）</td></tr>
+      <tr><th>呼び出すキー</th><td>他のアプリとぶつかるときに変えます（下記）</td></tr>
+      <tr><th>最初に開くタブ</th><td>「広げる」を押したときに最初に出るタブ</td></tr>
+      <tr><th>自動で立ち上げる</th><td>自動起動と見張り役をまとめてオン・オフします（<a href="#autostart">9. 自動起動について</a>）</td></tr>
+    </table>
+  </div>
+  <figure>
+    <img src="{{IMG:settings}}" alt="設定画面" width="390" />
+  </figure>
+</div>
+
+<div class="step">
+  <div class="step-body">
+    <h3>呼び出すキーを変える</h3>
+    <p>
+      「変更」を押すと待ち受けに変わるので、使いたい組み合わせをそのまま押してください。
+      <strong>Ctrl か Alt を含む</strong>組み合わせ（英数字・F1〜F12・Space など）が使えます。
+    </p>
+    <p style="color:var(--ink-mid);font-size:14px">
+      他のアプリが使っているキーだったときは、その旨が出て<strong>前のキーのまま</strong>になります。
+      別の組み合わせを押し直してください。<kbd>Esc</kbd> で待ち受けをやめられます。
+      保存したキーが次の起動時に他のアプリに取られていたときは、
+      <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>Space</kbd> に戻して動きます。
+    </p>
+  </div>
+  <figure>
+    <img src="{{IMG:settings-hotkey}}" alt="呼び出すキーを待ち受けているところ" width="390" />
+  </figure>
+</div>
 
 <h3>デフォルトの登録先を変える</h3>
 

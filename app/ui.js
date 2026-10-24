@@ -34,7 +34,12 @@ const pickerNote    = document.getElementById('pickerNote');
 const pickerList    = document.getElementById('pickerList');
 
 let bridge = null;
-new QWebChannel(qt.webChannelTransport, ch => { bridge = ch.objects.bridge; });
+// 設定画面の窓口は別の名前で載っている（settings_bridge.py）。
+let settingsBridge = null;
+new QWebChannel(qt.webChannelTransport, ch => {
+  bridge = ch.objects.bridge;
+  settingsBridge = ch.objects.settings || null;
+});
 
 // pause.pyw がウィンドウを出す直前に、背後を撮った画像を渡してくる。
 function setBackdrop(uri) {
@@ -114,6 +119,8 @@ const DUE_PRESETS = [
   { id: 'none',     name: '期限なし', hint: '期限を付けない' },
 ];
 let DEFAULT_DUE = 'today';
+// 一覧を広げたときに最初に開くタブ。設定画面で変えられる。
+let DEFAULT_WIDE_SCOPE = 'today';
 
 let pickedList  = DEFAULT_LIST;
 // 担当者は何人でも。押した順に並ぶ（送るときに Python 側が昇順へ均す）。
@@ -132,6 +139,7 @@ function setDirectory(data) {
     members: ((data.favorites || {}).members || []).map(String),
   };
   DEFAULT_DUE = data.default_due || 'today';
+  DEFAULT_WIDE_SCOPE = data.wide_scope || 'today';
   EXCLUDED = (data.excluded || []).map(String);
   resetTargets();
 }
@@ -370,6 +378,8 @@ function resetForm(context) {
   showError('');
   closePicker(false);
   closeWide();             // 広げたまま呼び出されても、打つ画面から始める
+  // 設定画面も同じ。settings.js は後から読まれるので、居るときだけ呼ぶ。
+  if (typeof closeSettings === 'function') closeSettings();
   if (!hasDraft()) {
     taskInput.value = '';
     autoMemo = context || '';
@@ -546,6 +556,7 @@ submitBtn.addEventListener('click', doSubmit);
 // キーの行き先は、上に載っているものから順に決める。
 //
 //   1. 更新の知らせ          Esc で閉じるだけ（選ぶものが無い）
+//   1'. 設定画面             Esc で入力へ戻る。キーを待ち受けている間はどのキーも採る
 //   2. 候補パネル            ↑↓ Enter Esc。広げた一覧の上に出ていてもこちらが先
 //   3. 広げた一覧            Esc は、絞り込みに文字があれば消す。無ければ入力へ戻る
 //   4. 入力画面              Esc で窓を閉じる、Ctrl+Enter で登録
@@ -559,6 +570,10 @@ document.addEventListener('keydown', e => {
     if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); closeUpdatePanel(); }
     return;
   }
+
+  // 設定画面は候補パネルも一覧も重ねないので、ここで全部引き受ける。
+  // 呼び出すキーを待ち受けている間は、どのキーもここで採る（入力へ流さない）。
+  if (typeof SETTINGS !== 'undefined' && SETTINGS.open) { onSettingsKey(e); return; }
 
   if (isOpen()) {
     if (e.key === 'ArrowDown') { e.preventDefault(); setActive(state.active + 1); return; }
@@ -617,6 +632,9 @@ document.addEventListener('keydown', e => {
   }
 
   if (e.ctrlKey && (e.key === 'e' || e.key === 'E')) { e.preventDefault(); openWide(); return; }
+  if (e.ctrlKey && e.key === ',' && typeof openSettings === 'function') {
+    e.preventDefault(); openSettings(); return;
+  }
 
   if (e.ctrlKey && (e.key === 'l' || e.key === 'L')) { e.preventDefault(); openPicker('list'); return; }
   if (e.ctrlKey && (e.key === 'u' || e.key === 'U')) { e.preventDefault(); openPicker('user'); return; }

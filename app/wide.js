@@ -313,11 +313,18 @@ function loadWide() {
   bridge.loadWide();
 }
 
+function selectScope(scope) {
+  WIDE.scope = scope;
+  [...wideTabs.children].forEach(el => el.classList.toggle('on', el.dataset.scope === scope));
+}
+
 function openWide() {
   if (WIDE.open) return;
   WIDE.open = true;
   closePicker(false);
+  if (typeof closeSettings === 'function') closeSettings();
   clearWideSearch();      // 前回の絞り込みを引きずらない（件数を見誤る）
+  selectScope(DEFAULT_WIDE_SCOPE);   // 前回のタブではなく、設定で決めたタブから始める
   document.body.classList.add('wide');
   if (bridge) bridge.setViewMode('wide');
   loadWide();
@@ -335,8 +342,7 @@ function closeWide() {
 wideTabs.addEventListener('click', e => {
   const tab = e.target.closest('.wide-tab');
   if (!tab || WIDE.busy) return;
-  WIDE.scope = tab.dataset.scope;
-  [...wideTabs.children].forEach(el => el.classList.toggle('on', el === tab));
+  selectScope(tab.dataset.scope);
   renderWide();
 });
 

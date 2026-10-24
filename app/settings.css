@@ -1,0 +1,68 @@
+/* ── 設定画面 ──
+   入力画面と同じ窓の大きさのまま、中身だけを入れ替える（広げた一覧と同じ作り）。
+   選ぶボタンは一覧のタブ（.wide-tab）をそのまま使い、見た目を揃える。 */
+
+.feed-actions { display: flex; gap: 4px; }
+
+#settingsArea { display: none; }
+body.settings #form-area { display: none; }
+body.settings #settingsArea {
+  display: flex; flex-direction: column;
+  height: 100%;
+}
+
+.settings-head {
+  flex: none;
+  display: flex; align-items: center; justify-content: space-between;
+  margin-bottom: 8px;
+}
+.settings-title { font-size: 13px; font-weight: 600; }
+
+/* 項目が増えて窓に収まらなくなっても、ここだけが流れる。 */
+.settings-body {
+  flex: 1 1 auto; min-height: 0;
+  overflow-y: auto; overflow-x: hidden;
+  display: flex; flex-direction: column; gap: 11px;
+}
+.settings-body::-webkit-scrollbar { width: 6px; }
+.settings-body::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.14); border-radius: 3px; }
+
+.settings-label {
+  font-size: 10px; font-weight: 600;
+  color: var(--text-mid);
+  letter-spacing: 0.3px;
+  margin-bottom: 5px;
+}
+
+.settings-seg { display: flex; flex-wrap: wrap; gap: 3px; }
+.settings-seg .wide-tab:disabled { opacity: 0.45; cursor: default; }
+
+.settings-hotkey { display: flex; align-items: center; gap: 8px; }
+.settings-hotkey kbd {
+  min-width: 120px; height: 26px;
+  display: inline-flex; align-items: center; justify-content: center;
+  padding: 0 10px;
+  background: rgba(255,255,255,0.08);
+  border: 1px solid var(--border); border-radius: 8px;
+  font-family: inherit; font-size: 11px; font-weight: 600;
+  color: var(--text);
+}
+/* 押す番を待っている間は、枠を光らせて「次に押したキーを採る」と分かるようにする。 */
+.settings-hotkey.recording kbd {
+  border-color: var(--input-focus);
+  color: var(--text-mid); font-weight: 500;
+}
+
+.settings-note {
+  font-size: 9.5px; color: var(--text-dim);
+  margin-top: 4px; line-height: 1.45;
+}
+.settings-note.warn { color: #FBBF24; }
+
+.settings-foot {
+  flex: none; min-height: 18px;
+  font-size: 10px; color: var(--text-dim);
+  padding-top: 6px; margin-top: 4px;
+  border-top: 1px solid var(--border);
+}
+.settings-foot.error { color: var(--error); }

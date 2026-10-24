@@ -569,8 +569,9 @@ class Bridge(QObject):
     def startApp(self) -> None:
         """初回設定を終えて本編へ移る。"""
         self._view.load(QUrl.fromLocalFile(appconfig.bundled('ui.html')))
-        self._window.setFixedSize(layout.WIN_W, layout.WIN_H)
-        layout.position_window(self._window, layout.WIN_W, layout.WIN_H)
+        w, h = layout.win_size()
+        self._window.setFixedSize(w, h)
+        layout.position_window(self._window, w, h)
         self._window.hide()
         appconfig.log('初回設定が終わりました')
 
